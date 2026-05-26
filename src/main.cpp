@@ -4,6 +4,7 @@
 int main() {
 
     std::cout << "hello\n";
-    std::cout << add(2, 3) << "\n";
+    std::cout << config_device();
+
     return 0;
 }

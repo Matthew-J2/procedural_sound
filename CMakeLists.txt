@@ -28,7 +28,7 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/mackron/miniaudio.git
     GIT_TAG 0.11.25
 )
-
+set(CMAKE_POSITION_INDEPENDENT_CODE ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(miniaudio)
 
 # -------------------------------------------------------
