@@ -3,20 +3,26 @@
 #include <math.h>
 #include <thread>
 #include <chrono>
+#include <iostream>
+#include <vector>
+#include <fstream>
 
 static std::unique_ptr<test_audio_data> audio_data;
+static std::vector<float> recorded_samples;
+static std::atomic<size_t> write_index = 0;
 
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
 {
-    // In playback mode copy data to pOutput. In capture mode read data from pInput. In full-duplex mode, both
-    // pOutput and pInput will be valid and you can move data from pInput into pOutput. Never process more than
-    // frameCount frames.
-    test_audio_data * data = (test_audio_data*)pDevice->pUserData;
 
-        float* out = (float*)pOutput;
-        float sampleRate = (float)pDevice->sampleRate;
-        ma_uint32 channels = pDevice->playback.channels;
+    // get oscillator state
+    test_audio_data* data = (test_audio_data*)pDevice->pUserData;
 
+    // access output buffer and device parameters
+    float* out = (float*)pOutput;
+    float sampleRate = (float)pDevice->sampleRate;
+    ma_uint32 channels = pDevice->playback.channels;
+
+    // fill output buffer with sine wave samples 
     for (ma_uint32 i = 0; i < frameCount; i++)
     {
         float sample = sinf(data->phase) * data->volume;
@@ -26,8 +32,15 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
         if (data->phase > 2.0f * M_PI)
             data->phase -= 2.0f * M_PI;
 
-       for (ma_uint32 c = 0; c < channels; c++)
+        // write to all speaker channels
+        for (ma_uint32 c = 0; c < channels; c++)
             out[i * channels + c] = sample;
+        
+        // write to log
+        if (write_index < recorded_samples.size()) //FIXME: this just drops samples when it's full. no bueno. it's also just fragile in general
+        {
+            recorded_samples[write_index++] = sample;
+        }
     }
 }
 
@@ -35,23 +48,44 @@ int config_device()
 {
     audio_data = std::make_unique<test_audio_data>(0.0f, 200.0f, 0.02f);
     ma_device_config config = ma_device_config_init(ma_device_type_playback);
-    config.playback.format   = ma_format_f32;   // Set to ma_format_unknown to use the device's native format.
-    config.playback.channels = 0;               // Set to 0 to use the device's native channel count.
-    config.sampleRate        = 0;           // Set to 0 to use the device's native sample rate.
-    config.dataCallback      = data_callback;   // This function will be called when miniaudio needs more data.
-    config.pUserData         = audio_data.get();   // Can be accessed from the device object (device.pUserData).
+    config.playback.format   = ma_format_f32;   //TODO: change code to either use f32 not float or use the OS default and do some really fun templating 
+    config.playback.channels = 0;
+    config.sampleRate        = 0;
+    config.dataCallback      = data_callback;
+    config.pUserData         = audio_data.get();
 
     ma_device device;
     if (ma_device_init(NULL, &config, &device) != MA_SUCCESS) {
         return -1;  // Failed to initialize the device.
     }
 
-    ma_device_start(&device);     // The device is sleeping by default so you'll need to start it manually.
+    std::cout << "sample rate:" << device.sampleRate << "\n";
+    std::cout << "channels" << device.playback.channels << "\n";
+    std::cout << "format:" << device.playback.format << "\n";
+    
+    size_t sampleTime = 5;
 
-    while (true) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
+    write_index = 0;
+    recorded_samples.clear();
+    recorded_samples.resize(device.sampleRate * sampleTime); //FIXME: the writes depend on pipewire this only like roughly tracks it
+
+    ma_device_start(&device);
+
+    // while (true) {
+    //     std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // }
+
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
 
     ma_device_uninit(&device);
+
+
+    std::ofstream file ("log.txt");
+
+    for (size_t i = 0; i < write_index; i++){
+        file << recorded_samples[i] << "\n";
+    }
+//TODO: wav as well
     return 0;
 }
