@@ -3,6 +3,7 @@
 #include <vector>
 #include <atomic>
 #include <bit>
+#include <new>
 
 struct test_audio_data{
     float phase;
@@ -16,8 +17,8 @@ struct SPSCRingBuffer{
         std::vector<T> data;
         size_t size;
         size_t mask;
-        alignas(64) std::atomic<size_t> write {0};
-        alignas(64) std::atomic<size_t> read {0};
+        alignas(std::hardware_destructive_interference_size) std::atomic<size_t> write {0};
+        alignas(std::hardware_destructive_interference_size) std::atomic<size_t> read {0};
 
     public:
         SPSCRingBuffer(size_t requested_size){
