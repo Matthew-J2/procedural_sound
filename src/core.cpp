@@ -4,12 +4,10 @@
 #include <thread>
 #include <chrono>
 #include <iostream>
-#include <vector>
 #include <fstream>
 
 static std::unique_ptr<test_audio_data> audio_data;
-static std::vector<float> recorded_samples;
-static std::atomic<size_t> write_index = 0;
+static std::unique_ptr<SPSCRingBuffer<float>> audio_log_buffer;
 
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
 {
@@ -37,10 +35,7 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
             out[i * channels + c] = sample;
         
         // write to log
-        if (write_index < recorded_samples.size()) //FIXME: this just drops samples when it's full. no bueno. it's also just fragile in general
-        {
-            recorded_samples[write_index++] = sample;
-        }
+        audio_log_buffer->push(sample);
     }
 }
 
@@ -59,33 +54,42 @@ int config_device()
         return -1;  // Failed to initialize the device.
     }
 
-    std::cout << "sample rate:" << device.sampleRate << "\n";
-    std::cout << "channels" << device.playback.channels << "\n";
-    std::cout << "format:" << device.playback.format << "\n";
+    std::cout << "sample rate: " << device.sampleRate << "\n";
+    std::cout << "channels: " << device.playback.channels << "\n";
+    std::cout << "format: " << device.playback.format << "\n";
     
     size_t sampleTime = 5;
 
-    write_index = 0;
-    recorded_samples.clear();
-    recorded_samples.resize(device.sampleRate * sampleTime); //FIXME: the writes depend on pipewire this only like roughly tracks it
+    audio_log_buffer = std::make_unique<SPSCRingBuffer<float>>(device.sampleRate * sampleTime * 2); //FIXME: multiplying gives slack but doesn't actually solve the risk of overflow from pipewire / your api of choice acting up. this is bad and wastes tons of memory but I'm leaving it like this for now / a while because I want to do other stuff
 
     ma_device_start(&device);
 
-    // while (true) {
-    //     std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    // }
+    std::ofstream file ("log.txt");
 
+    float sample;
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+    auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+
+    //FIXME: this is probably slow even for the main thread
+    while (std::chrono::steady_clock::now() < end) {
+        while (audio_log_buffer->pop(sample)) {
+            file << sample << "\n";
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    ma_device_stop(&device);
+
+    // drain buffer
+    while (audio_log_buffer->pop(sample)) {
+        file << sample << "\n";
+    }
+    file.close();
 
     ma_device_uninit(&device);
 
-
-    std::ofstream file ("log.txt");
-
-    for (size_t i = 0; i < write_index; i++){
-        file << recorded_samples[i] << "\n";
-    }
-//TODO: wav as well
+    std::cout << "dropped samples: " << audio_log_buffer->get_dropped() << "\n";
+//TODO: wav as well and also binary stream instead of this giant text file of floats
     return 0;
 }
