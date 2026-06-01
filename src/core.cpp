@@ -44,7 +44,7 @@ int config_device()
     audio_data = std::make_unique<test_audio_data>(0.0f, 200.0f, 0.02f);
     ma_device_config config = ma_device_config_init(ma_device_type_playback);
     config.playback.format   = ma_format_f32;   //TODO: change code to either use f32 not float or use the OS default and do some really fun templating 
-    config.playback.channels = 0;
+    config.playback.channels = 1; //TODO: get wav to work properly in stereo
     config.sampleRate        = 0;
     config.dataCallback      = data_callback;
     config.pUserData         = audio_data.get();
@@ -57,7 +57,23 @@ int config_device()
     std::cout << "sample rate: " << device.sampleRate << "\n";
     std::cout << "channels: " << device.playback.channels << "\n";
     std::cout << "format: " << device.playback.format << "\n";
+
+    ma_encoder wav_encoder;
+
+    ma_encoder_config wav_encoder_config = 
+        ma_encoder_config_init(
+            ma_encoding_format_wav,
+            device.playback.format,
+            device.playback.channels,
+            device.sampleRate 
+    );
     
+    ma_encoder_init_file(
+        "output.wav",
+        &wav_encoder_config,
+        &wav_encoder
+    );
+
     size_t sampleTime = 5;
 
     audio_log_buffer = std::make_unique<SPSCRingBuffer<float>>(device.sampleRate * sampleTime * 2); //FIXME: multiplying gives slack but doesn't actually solve the risk of overflow from pipewire / your api of choice acting up. this is bad and wastes tons of memory but I'm leaving it like this for now / a while because I want to do other stuff
@@ -74,6 +90,13 @@ int config_device()
     while (std::chrono::steady_clock::now() < end) {
         while (audio_log_buffer->pop(sample)) {
             file << sample << "\n";
+
+            ma_encoder_write_pcm_frames(
+                &wav_encoder,
+                &sample,
+                1,
+                nullptr
+            );
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -84,8 +107,16 @@ int config_device()
     // drain buffer
     while (audio_log_buffer->pop(sample)) {
         file << sample << "\n";
+
+        ma_encoder_write_pcm_frames(
+            &wav_encoder,
+            &sample,
+            1,
+            nullptr
+        );
     }
     file.close();
+    ma_encoder_uninit(&wav_encoder);
 
     ma_device_uninit(&device);
 
