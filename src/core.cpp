@@ -31,11 +31,13 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
             data->phase -= 2.0f * M_PI;
 
         // write to all speaker channels
-        for (ma_uint32 c = 0; c < channels; c++)
-            out[i * channels + c] = sample;
-        
-        // write to log
-        audio_log_buffer->push(sample);
+        for (size_t c = 0; c < channels; c++){
+            float v = sample;
+            out[i * channels + c] = v;
+ 
+            // write to log
+            audio_log_buffer->push(v);
+        }
     }
 }
 
@@ -44,7 +46,7 @@ int config_device()
     audio_data = std::make_unique<test_audio_data>(0.0f, 200.0f, 0.02f);
     ma_device_config config = ma_device_config_init(ma_device_type_playback);
     config.playback.format   = ma_format_f32;   //TODO: change code to either use f32 not float or use the OS default and do some really fun templating 
-    config.playback.channels = 1; //TODO: get wav to work properly in stereo
+    config.playback.channels = 0; //TODO: get wav to work properly in stereo
     config.sampleRate        = 0;
     config.dataCallback      = data_callback;
     config.pUserData         = audio_data.get();
@@ -86,17 +88,35 @@ int config_device()
 
     auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
 
+    std::vector<float> write_buffer;
+    write_buffer.reserve(4096);
+
     //FIXME: this is probably slow even for the main thread
+    //FIXME: this also should be fixed upstream by exposing a pop_frame() function or something
+    // in the buffer
     while (std::chrono::steady_clock::now() < end) {
         while (audio_log_buffer->pop(sample)) {
             file << sample << "\n";
 
-            ma_encoder_write_pcm_frames(
-                &wav_encoder,
-                &sample,
-                1,
-                nullptr
-            );
+            write_buffer.push_back(sample);
+
+            size_t frames = write_buffer.size() / device.playback.channels;
+            size_t valid_samples = frames * device.playback.channels;
+
+            if (frames > 0)
+            {
+                ma_encoder_write_pcm_frames(
+                    &wav_encoder,
+                    write_buffer.data(),
+                    frames,
+                    nullptr
+                );
+
+                write_buffer.erase(
+                    write_buffer.begin(),
+                    write_buffer.begin() + valid_samples
+                );
+            }
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -108,13 +128,19 @@ int config_device()
     while (audio_log_buffer->pop(sample)) {
         file << sample << "\n";
 
-        ma_encoder_write_pcm_frames(
-            &wav_encoder,
-            &sample,
-            1,
-            nullptr
-        );
+        size_t frames = write_buffer.size() / device.playback.channels;
+
+        if (frames > 0)
+        {
+            ma_encoder_write_pcm_frames(
+                &wav_encoder,
+                write_buffer.data(),
+                frames,
+                nullptr
+            );
+        }
     }
+    write_buffer.clear();
     file.close();
     ma_encoder_uninit(&wav_encoder);
 
