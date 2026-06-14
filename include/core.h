@@ -11,6 +11,12 @@ struct test_audio_data{
     float volume;
 };
 
+template<size_t Channels>
+struct AudioFrame
+{
+    float samples[Channels];
+};
+
 template <typename T>
 struct SPSCRingBuffer{
     private:
