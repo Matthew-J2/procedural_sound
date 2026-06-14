@@ -1,22 +1,18 @@
 #include "core.h"
+#include "oscillator.h"
 #include <memory>
-#include <math.h>
 #include <thread>
 #include <chrono>
 #include <iostream>
 #include <fstream>
 
-static std::unique_ptr<test_audio_data> audio_data;
-
 using StereoFrame = AudioFrame<2>;
-
 static std::unique_ptr<SPSCRingBuffer<StereoFrame>> audio_log_buffer;
 
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
 {
-
-    // get oscillator state
-    test_audio_data* data = (test_audio_data*)pDevice->pUserData;
+    // get oscillator
+    SineOscillator* osc = (SineOscillator*)pDevice->pUserData;
 
     // access output buffer and device parameters
     float* out = (float*)pOutput;
@@ -26,36 +22,27 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
     // fill output buffer with sine wave samples 
     for (ma_uint32 i = 0; i < frameCount; i++)
     {
-        float sample = sinf(data->phase) * data->volume;
-        data->phase += 2.0f * M_PI * data->frequency / sampleRate;
-
-
-        if (data->phase > 2.0f * M_PI)
-            data->phase -= 2.0f * M_PI;
-
+        float sample = osc->tick(sampleRate);
         StereoFrame frame;
 
         // write to all speaker channels
         for (size_t c = 0; c < channels; c++){
             frame.samples[c] = sample;
             out[i * channels + c] = sample;
- 
-            // write to log
-            // audio_log_buffer->push(v);
         }
-    audio_log_buffer->push(frame);
+        audio_log_buffer->push(frame);
     }
 }
 
 int config_device()
 {
-    audio_data = std::make_unique<test_audio_data>(0.0f, 200.0f, 0.02f);
+    auto osc = std::make_unique<SineOscillator>(200.0f, 0.02f);
     ma_device_config config = ma_device_config_init(ma_device_type_playback);
-    config.playback.format   = ma_format_f32;   //TODO: change code to either use f32 not float or use the OS default and do some really fun templating 
-    config.playback.channels = 2; //TODO: get wav to work properly in stereo
+    config.playback.format   = ma_format_f32;
+    config.playback.channels = 2; //TODO: support 5.1 7.1 surround sound one day
     config.sampleRate        = 0;
     config.dataCallback      = data_callback;
-    config.pUserData         = audio_data.get();
+    config.pUserData         = osc.get();
 
     ma_device device;
     if (ma_device_init(NULL, &config, &device) != MA_SUCCESS) {
@@ -95,8 +82,6 @@ int config_device()
     auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
 
     //FIXME: this is probably slow even for the main thread
-    //FIXME: this also should be fixed upstream by exposing a pop_frame() function or something
-    // in the buffer
     while (std::chrono::steady_clock::now() < end) {
         while (audio_log_buffer->pop(frame)) {
             file << frame.samples[0] << " "
@@ -129,11 +114,10 @@ int config_device()
         );
     }
     file.close();
-    ma_encoder_uninit(&wav_encoder);
-
+    ma_encoder_uninit(&wav_encoder); //TODO: RAII
     ma_device_uninit(&device);
 
     std::cout << "dropped samples: " << audio_log_buffer->get_dropped() << "\n";
-//TODO: wav as well and also binary stream instead of this giant text file of floats
+    //TODO: binary stream instead of this giant text file of floats
     return 0;
 }

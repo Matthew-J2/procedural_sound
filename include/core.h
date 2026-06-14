@@ -5,12 +5,6 @@
 #include <bit>
 #include <new>
 
-struct test_audio_data{
-    float phase;
-    float frequency;
-    float volume;
-};
-
 template<size_t Channels>
 struct AudioFrame
 {
