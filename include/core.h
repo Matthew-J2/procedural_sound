@@ -1,9 +1,15 @@
 #pragma once
+#include "oscillator.h"
 #include <miniaudio.h>
 #include <vector>
 #include <atomic>
 #include <bit>
 #include <new>
+#include <memory>
+
+struct AudioContext {
+    std::vector<std::unique_ptr<Oscillator>> oscillators;
+};
 
 template<size_t Channels>
 struct AudioFrame

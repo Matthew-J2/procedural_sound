@@ -11,8 +11,8 @@ static std::unique_ptr<SPSCRingBuffer<StereoFrame>> audio_log_buffer;
 
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
 {
-    // get oscillator
-    SineOscillator* osc = (SineOscillator*)pDevice->pUserData;
+    // get audio context (oscillators right now)
+    AudioContext* audio_ctx = (AudioContext*)pDevice->pUserData;
 
     // access output buffer and device parameters
     float* out = (float*)pOutput;
@@ -22,7 +22,10 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
     // fill output buffer with sine wave samples 
     for (ma_uint32 i = 0; i < frameCount; i++)
     {
-        float sample = osc->tick(sampleRate);
+        float sample = 0.0f;
+        for (auto& osc : audio_ctx->oscillators) {
+            sample += osc->tick(sampleRate);
+        }
         StereoFrame frame;
 
         // write to all speaker channels
@@ -36,13 +39,18 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
 
 int config_device()
 {
-    auto osc = std::make_unique<SineOscillator>(200.0f, 0.02f);
+    auto audio_ctx = std::make_unique<AudioContext>();
+    audio_ctx->oscillators.push_back(std::make_unique<SineOscillator>(130.81f, 0.02f));
+    audio_ctx->oscillators.push_back(std::make_unique<SquareOscillator>(164.81f, 0.02f));
+    audio_ctx->oscillators.push_back(std::make_unique<TriangleOscillator>(196.00f, 0.02f));
+    audio_ctx->oscillators.push_back(std::make_unique<SawOscillator>(261.63f, 0.02f));
+
     ma_device_config config = ma_device_config_init(ma_device_type_playback);
     config.playback.format   = ma_format_f32;
     config.playback.channels = 2; //TODO: support 5.1 7.1 surround sound one day
     config.sampleRate        = 0;
     config.dataCallback      = data_callback;
-    config.pUserData         = osc.get();
+    config.pUserData         = audio_ctx.get();
 
     ma_device device;
     if (ma_device_init(NULL, &config, &device) != MA_SUCCESS) {
