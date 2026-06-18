@@ -1,5 +1,6 @@
 #include "core.h"
 #include "oscillator.h"
+#include "graph.h"
 #include <memory>
 #include <thread>
 #include <chrono>
@@ -16,18 +17,15 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
 
     // access output buffer and device parameters
     float* out = (float*)pOutput;
-    float sampleRate = (float)pDevice->sampleRate;
     ma_uint32 channels = pDevice->playback.channels;
 
-    // fill output buffer with sine wave samples 
+    // fill output buffer with samples 
     for (ma_uint32 i = 0; i < frameCount; i++)
     {
-        float sample = 0.0f;
-        for (auto& osc : audio_ctx->oscillators) {
-            sample += osc->tick(sampleRate);
-        }
-        StereoFrame frame;
+        audio_ctx->current_sample++;
+        float sample = audio_ctx->output_node->pull();
 
+        StereoFrame frame;
         // write to all speaker channels
         for (size_t c = 0; c < channels; c++){
             frame.samples[c] = sample;
@@ -40,10 +38,32 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
 int config_device()
 {
     auto audio_ctx = std::make_unique<AudioContext>();
-    audio_ctx->oscillators.push_back(std::make_unique<SineOscillator>(130.81f, 0.02f));
-    audio_ctx->oscillators.push_back(std::make_unique<SquareOscillator>(164.81f, 0.02f));
-    audio_ctx->oscillators.push_back(std::make_unique<TriangleOscillator>(196.00f, 0.02f));
-    audio_ctx->oscillators.push_back(std::make_unique<SawOscillator>(261.63f, 0.02f));
+    audio_ctx->sample_rate = 0.00f;
+    
+    auto mixer = std::make_shared<MixerNode>();
+    mixer->ctx = audio_ctx.get();
+
+    auto sine = std::make_shared<OscillatorNode>(
+        std::make_unique<SineOscillator>(130.81f, 0.02f), audio_ctx.get()
+    );
+
+    auto square = std::make_shared<OscillatorNode>(
+        std::make_unique<SquareOscillator>(164.81f, 0.02f), audio_ctx.get()
+    );
+
+    auto triangle = std::make_shared<OscillatorNode>(
+        std::make_unique<TriangleOscillator>(196.00f, 0.02f), audio_ctx.get()
+    );
+
+    auto saw = std::make_shared<OscillatorNode>(
+        std::make_unique<SawOscillator>(261.63f, 0.02f), audio_ctx.get()
+    );
+
+    mixer->inputs.push_back(sine);
+    mixer->inputs.push_back(square);
+    mixer->inputs.push_back(triangle);
+    mixer->inputs.push_back(saw);
+    audio_ctx->output_node = mixer;
 
     ma_device_config config = ma_device_config_init(ma_device_type_playback);
     config.playback.format   = ma_format_f32;
@@ -56,6 +76,8 @@ int config_device()
     if (ma_device_init(NULL, &config, &device) != MA_SUCCESS) {
         return -1;  // Failed to initialize the device.
     }
+
+    audio_ctx->sample_rate = (float)device.sampleRate;
 
     std::cout << "sample rate: " << device.sampleRate << "\n";
     std::cout << "channels: " << device.playback.channels << "\n";

@@ -7,8 +7,12 @@
 #include <new>
 #include <memory>
 
+struct AudioNode;
+
 struct AudioContext {
-    std::vector<std::unique_ptr<Oscillator>> oscillators;
+    float sample_rate;
+    uint64_t current_sample = 0; // used for feedback loops
+    std::shared_ptr<AudioNode> output_node;
 };
 
 template<size_t Channels>

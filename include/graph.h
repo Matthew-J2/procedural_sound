@@ -1,0 +1,53 @@
+#pragma once
+#include <vector>
+#include <memory>   
+#include "core.h"
+#include "oscillator.h"
+
+
+struct AudioNode {
+    std::vector<std::shared_ptr<AudioNode>> inputs;
+    AudioContext* ctx = nullptr;
+
+    virtual float process() = 0;
+    virtual ~AudioNode() = default;
+
+    float pull() {
+        if (ctx->current_sample == last_ticked_sample)
+            return cached_output; // if there's a feedback loop calculate it next sample
+        last_ticked_sample = ctx->current_sample;
+        cached_output = process();
+        return cached_output;
+    }
+
+    private:
+        uint64_t last_ticked_sample = UINT64_MAX;
+        float cached_output = 0.0f;
+
+
+};
+
+struct OscillatorNode : AudioNode {
+    std::unique_ptr<Oscillator> osc;
+
+    OscillatorNode(std::unique_ptr<Oscillator> o, AudioContext* ctx) {
+        osc = std::move(o);
+        this->ctx = ctx;
+    }
+
+    // inputs condition for FM synthesis
+    float process() override {
+        if (!inputs.empty())
+            osc->frequency = inputs[0]->pull();
+        return osc->tick(ctx->sample_rate);
+    }
+};
+
+struct MixerNode : AudioNode {
+    float process() override {
+        float sum = 0.0f;
+        for (auto& input : inputs)
+            sum += input->pull();
+        return sum;
+    }
+};
