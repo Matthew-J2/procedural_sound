@@ -105,18 +105,16 @@ int config_device()
 
     ma_device_start(&device);
 
-    std::ofstream file ("log.txt");
+    std::ofstream file ("log.raw", std::ios::binary);
 
     StereoFrame frame;
 
     auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
 
-    //FIXME: this is probably slow even for the main thread
+    //FIXME: busy waiting will be a problem in the future
     while (std::chrono::steady_clock::now() < end) {
         while (audio_log_buffer->pop(frame)) {
-            file << frame.samples[0] << " "
-                 << frame.samples[1] << "\n";
-
+            file.write(reinterpret_cast<const char*>(&frame), sizeof(frame));
             ma_encoder_write_pcm_frames(
                 &wav_encoder,
                 frame.samples,
@@ -133,9 +131,7 @@ int config_device()
 
     // drain buffer
     while (audio_log_buffer->pop(frame)) {
-        file << frame.samples[0] << " "
-             << frame.samples[1] << "\n";
-
+        file.write(reinterpret_cast<const char*>(&frame), sizeof(frame));
         ma_encoder_write_pcm_frames(
             &wav_encoder,
             frame.samples,
