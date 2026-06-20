@@ -40,10 +40,20 @@ struct SquareOscillator : Oscillator {
 struct TriangleOscillator : Oscillator {
     using Oscillator::Oscillator;
     float tick(float sample_rate) override {
-        float sample = (2.0f * fabsf(phase / PI - 1.0f) - 1.0f) * amplitude;
-        phase += 2.0 * PI * frequency / sample_rate;
+        float t = phase / (2.0f * PI); // normalize to [0,1)
+
+        float sample;
+        if (t < 0.5f)
+            sample = (t * 4.0f - 1.0f);
+        else
+            sample = (3.0f - t * 4.0f);
+
+        sample *= amplitude;
+
+        phase += 2.0f * PI * frequency / sample_rate;
         if (phase > 2.0f * PI)
             phase -= 2.0f * PI;
+
         return sample;
     }
 };
