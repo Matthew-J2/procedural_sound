@@ -74,7 +74,8 @@ int config_device()
 
     ma_device device;
     if (ma_device_init(NULL, &config, &device) != MA_SUCCESS) {
-        return -1;  // Failed to initialize the device.
+        std::cerr << "Failed to init miniaudio device.";
+        return -1;
     }
 
     audio_ctx->sample_rate = (float)device.sampleRate;
@@ -93,19 +94,28 @@ int config_device()
             device.sampleRate 
     );
     
-    ma_encoder_init_file(
-        "output.wav",
-        &wav_encoder_config,
-        &wav_encoder
-    );
+    if (ma_encoder_init_file("output.wav", &wav_encoder_config, &wav_encoder) != MA_SUCCESS) {
+        std::cerr << "Failed to init wav encoder.\n";
+        ma_device_uninit(&device);
+        return -1;
+    }
 
     size_t sampleTime = 5;
 
     audio_log_buffer = std::make_unique<SPSCRingBuffer<StereoFrame>>(device.sampleRate * sampleTime * 2); //FIXME: multiplying gives slack but doesn't actually solve the risk of overflow from pipewire / your api of choice acting up. this is bad and wastes tons of memory but I'm leaving it like this for now / a while because I want to do other stuff
 
-    ma_device_start(&device);
+    if (ma_device_start(&device) != MA_SUCCESS) {
+        std::cerr << "Failed to start wav miniaudio device.\n";
+        ma_encoder_uninit(&wav_encoder);
+        ma_device_uninit(&device);
+        return -1;
+    }
 
     std::ofstream file ("log.raw", std::ios::binary);
+
+    if (!file) {
+        std::cerr << "Warning: failed to open log.raw, no raw logs will be produced\n";
+    }
 
     StereoFrame frame;
 
