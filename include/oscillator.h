@@ -51,10 +51,10 @@ struct TriangleOscillator : Oscillator {
 struct SawOscillator : Oscillator {
     using Oscillator::Oscillator;
     float tick(float sample_rate) override {
-        float sample = (phase / M_PI - 1.0f) * amplitude;
-        phase += 2.0f * M_PI * frequency / sample_rate;
-        if (phase > 2.0f * M_PI)
-            phase -= 2.0f * M_PI;
+        float sample = (phase / PI - 1.0f) * amplitude;
+        phase += 2.0f * PI * frequency / sample_rate;
+        if (phase > 2.0f * PI)
+            phase -= 2.0f * PI;
         return sample;
     }
 };
