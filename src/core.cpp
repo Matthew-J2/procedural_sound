@@ -144,6 +144,5 @@ int config_device()
     ma_device_uninit(&device);
 
     std::cout << "dropped samples: " << audio_log_buffer->get_dropped() << "\n";
-    //TODO: binary stream instead of this giant text file of floats
     return 0;
 }
