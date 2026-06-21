@@ -59,10 +59,16 @@ int config_device()
         std::make_unique<SawOscillator>(261.63f, 0.02f), audio_ctx.get()
     );
 
+    auto saw_gate = std::make_shared<GateNode>(
+        saw, audio_ctx.get()
+    );
+
+    saw_gate->active = true;
+
     mixer->inputs.push_back(sine);
     mixer->inputs.push_back(square);
     mixer->inputs.push_back(triangle);
-    mixer->inputs.push_back(saw);
+    mixer->inputs.push_back(saw_gate);
     audio_ctx->output_node = mixer;
 
     ma_device_config config = ma_device_config_init(ma_device_type_playback);

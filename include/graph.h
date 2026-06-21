@@ -51,3 +51,20 @@ struct MixerNode : AudioNode {
         return sum;
     }
 };
+
+// On/off switch for the graph. Blocks input if not active.
+struct GateNode : AudioNode {
+    bool active = false;
+
+    GateNode(std::shared_ptr<AudioNode> source, AudioContext* ctx) {
+        inputs.push_back(source);
+        this->ctx = ctx;
+    }
+
+    float process() override {
+        // oscillator keeps running while gate is closed. CPU inefficient
+        // but more accurate to how synths work
+        float sample = inputs[0]->pull();
+        return active ? sample : 0.0f;
+    }
+};
