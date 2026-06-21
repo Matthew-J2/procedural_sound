@@ -44,6 +44,7 @@ struct SPSCRingBuffer{
 
         bool push(const T&);
         bool pop(T&);
+        bool peek(T&) const;
         size_t get_dropped() const;
 };
 
@@ -77,6 +78,16 @@ bool SPSCRingBuffer<T>::pop(T& out){
 
     out = data[current_read];
     read.store((current_read + 1) & mask, std::memory_order_release);
+    return true;
+}
+
+template <typename T>
+bool SPSCRingBuffer<T>::peek(T& out) const {
+    size_t current_write = write.load(std::memory_order_acquire);
+    size_t current_read = read.load(std::memory_order_relaxed);
+    if (current_write == current_read)
+        return false;
+    out = data[current_read];
     return true;
 }
 

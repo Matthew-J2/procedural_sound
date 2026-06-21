@@ -1,6 +1,7 @@
 #include "core.h"
 #include "oscillator.h"
 #include "graph.h"
+#include "event.h"
 #include <memory>
 #include <thread>
 #include <chrono>
@@ -9,6 +10,30 @@
 
 using StereoFrame = AudioFrame<2>;
 static std::unique_ptr<SPSCRingBuffer<StereoFrame>> audio_log_buffer;
+static std::unique_ptr<SPSCRingBuffer<ScheduledEvent>> event_queue;
+static std::shared_ptr<OscillatorNode> osc_node;
+static std::shared_ptr<GateNode> gate;
+
+void dispatch_due_events(AudioContext* ctx, SPSCRingBuffer<ScheduledEvent>& queue,
+                          std::shared_ptr<OscillatorNode>& osc, std::shared_ptr<GateNode>& gate)
+{
+    ScheduledEvent ev;
+    while (queue.peek(ev) && ev.trigger_sample <= ctx->current_sample) {
+        queue.pop(ev);
+
+        switch (ev.type) {
+            case EventType::NoteOn:
+                osc->osc->frequency = ev.frequency;
+                osc->osc->amplitude = ev.amplitude;
+                osc->osc->phase = 0.0f;
+                gate->active = true;
+                break;
+            case EventType::NoteOff:
+                gate->active = false;
+                break;
+        }
+    }
+}
 
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
 {
@@ -23,6 +48,7 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
     for (ma_uint32 i = 0; i < frameCount; i++)
     {
         audio_ctx->current_sample++;
+        dispatch_due_events(audio_ctx, *event_queue, osc_node, gate);
         float sample = audio_ctx->output_node->pull();
 
         StereoFrame frame;
@@ -65,11 +91,18 @@ int config_device()
 
     saw_gate->active = true;
 
+    //TODO: put this in audio context
+    osc_node = saw;
+    gate = saw_gate;
+    event_queue = std::make_unique<SPSCRingBuffer<ScheduledEvent>>(64);
+
     mixer->inputs.push_back(sine);
     mixer->inputs.push_back(square);
     mixer->inputs.push_back(triangle);
     mixer->inputs.push_back(saw_gate);
     audio_ctx->output_node = mixer;
+
+
 
     ma_device_config config = ma_device_config_init(ma_device_type_playback);
     config.playback.format   = ma_format_f32;
@@ -110,6 +143,7 @@ int config_device()
 
     audio_log_buffer = std::make_unique<SPSCRingBuffer<StereoFrame>>(device.sampleRate * sampleTime * 2); //FIXME: multiplying gives slack but doesn't actually solve the risk of overflow from pipewire / your api of choice acting up. this is bad and wastes tons of memory but I'm leaving it like this for now / a while because I want to do other stuff
 
+    // start audio device
     if (ma_device_start(&device) != MA_SUCCESS) {
         std::cerr << "Failed to start wav miniaudio device.\n";
         ma_encoder_uninit(&wav_encoder);
@@ -127,6 +161,18 @@ int config_device()
 
     auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
 
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = 0,
+        .frequency = 261.63f,
+        .amplitude = 0.02f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(2.5 * audio_ctx->sample_rate)
+    });
+
     //FIXME: busy waiting will be a problem in the future
     while (std::chrono::steady_clock::now() < end) {
         while (audio_log_buffer->pop(frame)) {
@@ -143,6 +189,7 @@ int config_device()
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
+    // stop audio device
     ma_device_stop(&device);
 
     // drain buffer
