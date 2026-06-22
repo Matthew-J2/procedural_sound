@@ -58,49 +58,47 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
     }
 }
 
-int config_device()
+void build_patch(AudioContext* ctx)
 {
-    auto audio_ctx = std::make_unique<AudioContext>();
-    audio_ctx->sample_rate = 0.00f;
-    
     auto mixer = std::make_shared<MixerNode>();
-    mixer->ctx = audio_ctx.get();
+    mixer->ctx = ctx;
 
     auto sine = std::make_shared<OscillatorNode>(
-        std::make_unique<SineOscillator>(130.81f, 0.02f), audio_ctx.get()
+        std::make_unique<SineOscillator>(130.81f, 0.02f), ctx
     );
-
     auto square = std::make_shared<OscillatorNode>(
-        std::make_unique<SquareOscillator>(164.81f, 0.02f), audio_ctx.get()
+        std::make_unique<SquareOscillator>(164.81f, 0.02f), ctx
     );
-
     auto triangle = std::make_shared<OscillatorNode>(
-        std::make_unique<TriangleOscillator>(196.00f, 0.02f), audio_ctx.get()
+        std::make_unique<TriangleOscillator>(196.00f, 0.02f), ctx
     );
-
     auto saw = std::make_shared<OscillatorNode>(
-        std::make_unique<SawOscillator>(261.63f, 0.02f), audio_ctx.get()
+        std::make_unique<SawOscillator>(261.63f, 0.02f), ctx
     );
 
-    auto saw_gate = std::make_shared<GateNode>(
-        saw, audio_ctx.get()
-    );
-
+    auto saw_gate = std::make_shared<GateNode>(saw, ctx);
     saw_gate->active = true;
 
-    auto event_queue = std::make_unique<SPSCRingBuffer<ScheduledEvent>>(64);
-    //TODO: put this in audio context
-    audio_ctx->osc_node = saw;
-    audio_ctx->gate = saw_gate;
-    audio_ctx->event_queue = event_queue.get();
+    ctx->osc_node = saw;
+    ctx->gate = saw_gate;
 
     mixer->inputs.push_back(sine);
     mixer->inputs.push_back(square);
     mixer->inputs.push_back(triangle);
     mixer->inputs.push_back(saw_gate);
-    audio_ctx->output_node = mixer;
 
+    ctx->output_node = mixer;
+}
 
+int config_device()
+{
+    auto audio_ctx = std::make_unique<AudioContext>();
+    audio_ctx->sample_rate = 0.00f;
+    
+    build_patch(audio_ctx.get());
+
+    auto event_queue = std::make_unique<SPSCRingBuffer<ScheduledEvent>>(64);
+    audio_ctx->event_queue = event_queue.get();
 
     ma_device_config config = ma_device_config_init(ma_device_type_playback);
     config.playback.format   = ma_format_f32;
