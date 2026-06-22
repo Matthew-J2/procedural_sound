@@ -10,9 +10,6 @@
 
 using StereoFrame = AudioFrame<2>;
 static std::unique_ptr<SPSCRingBuffer<StereoFrame>> audio_log_buffer;
-static std::unique_ptr<SPSCRingBuffer<ScheduledEvent>> event_queue;
-static std::shared_ptr<OscillatorNode> osc_node;
-static std::shared_ptr<GateNode> gate;
 
 void dispatch_due_events(AudioContext* ctx, SPSCRingBuffer<ScheduledEvent>& queue,
                           std::shared_ptr<OscillatorNode>& osc, std::shared_ptr<GateNode>& gate)
@@ -48,7 +45,7 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
     for (ma_uint32 i = 0; i < frameCount; i++)
     {
         audio_ctx->current_sample++;
-        dispatch_due_events(audio_ctx, *event_queue, osc_node, gate);
+        dispatch_due_events(audio_ctx, *audio_ctx->event_queue, audio_ctx->osc_node, audio_ctx->gate);
         float sample = audio_ctx->output_node->pull();
 
         StereoFrame frame;
@@ -91,10 +88,11 @@ int config_device()
 
     saw_gate->active = true;
 
+    auto event_queue = std::make_unique<SPSCRingBuffer<ScheduledEvent>>(64);
     //TODO: put this in audio context
-    osc_node = saw;
-    gate = saw_gate;
-    event_queue = std::make_unique<SPSCRingBuffer<ScheduledEvent>>(64);
+    audio_ctx->osc_node = saw;
+    audio_ctx->gate = saw_gate;
+    audio_ctx->event_queue = event_queue.get();
 
     mixer->inputs.push_back(sine);
     mixer->inputs.push_back(square);

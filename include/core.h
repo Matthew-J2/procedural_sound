@@ -1,5 +1,6 @@
 #pragma once
 #include "oscillator.h"
+#include "event.h"
 #include <miniaudio.h>
 #include <vector>
 #include <atomic>
@@ -8,11 +9,18 @@
 #include <memory>
 
 struct AudioNode;
+struct OscillatorNode;
+struct GateNode;
+template <typename T> struct SPSCRingBuffer;
 
 struct AudioContext {
     float sample_rate;
     uint64_t current_sample = 0; // used for feedback loops
     std::shared_ptr<AudioNode> output_node;
+
+    SPSCRingBuffer<ScheduledEvent>* event_queue = nullptr;
+    std::shared_ptr<OscillatorNode> osc_node;
+    std::shared_ptr<GateNode> gate;
 };
 
 template<size_t Channels>
