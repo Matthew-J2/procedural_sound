@@ -9,11 +9,11 @@
 #include <fstream>
 
 using StereoFrame = AudioFrame<2>;
-static std::unique_ptr<SPSCRingBuffer<StereoFrame>> audio_log_buffer;
 
-void dispatch_due_events(AudioContext* ctx, SPSCRingBuffer<ScheduledEvent>& queue,
-                          std::shared_ptr<OscillatorNode>& osc, std::shared_ptr<GateNode>& gate){
-    
+void dispatch_due_events(AudioContext* ctx, 
+                         SPSCRingBuffer<ScheduledEvent>& queue,
+                         std::shared_ptr<OscillatorNode>& osc, 
+                         std::shared_ptr<GateNode>& gate) {
     // Looks at next scheduled event and if it exists and is due, 
     // run event and remove from queue
     ScheduledEvent ev;
@@ -56,7 +56,7 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
             frame.samples[c] = sample;
             out[i * channels + c] = sample;
         }
-        audio_log_buffer->push(frame);
+        audio_ctx->audio_log_buffer->push(frame);
     }
 }
 
@@ -157,7 +157,7 @@ int config_device()
 
     size_t sampleTime = 5;
 
-    audio_log_buffer = std::make_unique<SPSCRingBuffer<StereoFrame>>(device.sampleRate * sampleTime * 2); //FIXME: multiplying gives slack but doesn't actually solve the risk of overflow from pipewire / your api of choice acting up. this is bad and wastes tons of memory but I'm leaving it like this for now / a while because I want to do other stuff
+    audio_ctx->audio_log_buffer = std::make_unique<SPSCRingBuffer<StereoFrame>>(device.sampleRate * sampleTime * 2); //FIXME: multiplying gives slack but doesn't actually solve the risk of overflow from pipewire / your api of choice acting up. this is bad and wastes tons of memory but I'm leaving it like this for now / a while because I want to do other stuff
 
     // push events on queue
     event_queue->push({
@@ -185,7 +185,7 @@ int config_device()
     //FIXME: busy waiting will be a problem in the future
     // while callback runs, write frames to wav and raw file every 10ms
     while (std::chrono::steady_clock::now() < end) {
-        while (audio_log_buffer->pop(frame)) {
+        while (audio_ctx->audio_log_buffer->pop(frame)) {
             file.write(reinterpret_cast<const char*>(&frame), sizeof(frame));
             ma_encoder_write_pcm_frames(
                 &wav_encoder,
@@ -203,7 +203,7 @@ int config_device()
     ma_device_stop(&device);
 
     // drain buffer
-    while (audio_log_buffer->pop(frame)) {
+    while (audio_ctx->audio_log_buffer->pop(frame)) {
         file.write(reinterpret_cast<const char*>(&frame), sizeof(frame));
         ma_encoder_write_pcm_frames(
             &wav_encoder,
@@ -218,6 +218,6 @@ int config_device()
     ma_encoder_uninit(&wav_encoder); //TODO: RAII
     ma_device_uninit(&device);
 
-    std::cout << "dropped samples: " << audio_log_buffer->get_dropped() << "\n";
+    std::cout << "dropped samples: " << audio_ctx->audio_log_buffer->get_dropped() << "\n";
     return 0;
 }

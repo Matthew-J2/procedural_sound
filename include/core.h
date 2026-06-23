@@ -8,11 +8,19 @@
 #include <new>
 #include <memory>
 
+template<size_t Channels>
+struct AudioFrame
+{
+    float samples[Channels];
+};
+
 struct AudioNode;
 struct OscillatorNode;
 struct GateNode;
+struct AudioLogBuffer;
 template <typename T> struct SPSCRingBuffer;
 
+using StereoFrame = AudioFrame<2>;
 struct AudioContext {
     float sample_rate;
     uint64_t current_sample = 0; // used for feedback loops
@@ -21,12 +29,7 @@ struct AudioContext {
     SPSCRingBuffer<ScheduledEvent>* event_queue = nullptr;
     std::shared_ptr<OscillatorNode> osc_node;
     std::shared_ptr<GateNode> gate;
-};
-
-template<size_t Channels>
-struct AudioFrame
-{
-    float samples[Channels];
+    std::unique_ptr<SPSCRingBuffer<StereoFrame>> audio_log_buffer;
 };
 
 template <typename T>
