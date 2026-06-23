@@ -17,7 +17,6 @@ struct AudioFrame
 struct AudioNode;
 struct OscillatorNode;
 struct GateNode;
-struct AudioLogBuffer;
 template <typename T> struct SPSCRingBuffer;
 
 using StereoFrame = AudioFrame<2>;
