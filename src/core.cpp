@@ -12,8 +12,10 @@ using StereoFrame = AudioFrame<2>;
 static std::unique_ptr<SPSCRingBuffer<StereoFrame>> audio_log_buffer;
 
 void dispatch_due_events(AudioContext* ctx, SPSCRingBuffer<ScheduledEvent>& queue,
-                          std::shared_ptr<OscillatorNode>& osc, std::shared_ptr<GateNode>& gate)
-{
+                          std::shared_ptr<OscillatorNode>& osc, std::shared_ptr<GateNode>& gate){
+    
+    // Looks at next scheduled event and if it exists and is due, 
+    // run event and remove from queue
     ScheduledEvent ev;
     while (queue.peek(ev) && ev.trigger_sample <= ctx->current_sample) {
         queue.pop(ev);
@@ -63,6 +65,7 @@ void build_patch(AudioContext* ctx)
     auto mixer = std::make_shared<MixerNode>();
     mixer->ctx = ctx;
 
+    // Create oscillators, put in mixer, put mixer in context as output node.
     auto sine = std::make_shared<OscillatorNode>(
         std::make_unique<SineOscillator>(130.81f, 0.02f), ctx
     );
@@ -92,6 +95,7 @@ void build_patch(AudioContext* ctx)
 
 std::unique_ptr<SPSCRingBuffer<ScheduledEvent>> init_event_queue(AudioContext* ctx, size_t capacity = 64)
 {
+    // allocate and connect queue
     auto queue = std::make_unique<SPSCRingBuffer<ScheduledEvent>>(capacity);
     ctx->event_queue = queue.get();
     return queue;
@@ -99,12 +103,16 @@ std::unique_ptr<SPSCRingBuffer<ScheduledEvent>> init_event_queue(AudioContext* c
 
 int config_device()
 {
+    // create engine state
     auto audio_ctx = std::make_unique<AudioContext>();
     audio_ctx->sample_rate = 0.00f;
     
+    // build patches and event queue
     build_patch(audio_ctx.get());
     auto event_queue = init_event_queue(audio_ctx.get());
 
+    // set up miniaudio device to call data callback for audio samples when init
+    // and started
     ma_device_config config = ma_device_config_init(ma_device_type_playback);
     config.playback.format   = ma_format_f32;
     config.playback.channels = 2; //TODO: support 5.1 7.1 surround sound one day
@@ -117,15 +125,15 @@ int config_device()
         std::cerr << "Failed to init miniaudio device.";
         return -1;
     }
-
+    
+    // defined by miniaudio device
     audio_ctx->sample_rate = (float)device.sampleRate;
 
     std::cout << "sample rate: " << device.sampleRate << "\n";
     std::cout << "channels: " << device.playback.channels << "\n";
     std::cout << "format: " << device.playback.format << "\n";
 
-    ma_encoder wav_encoder;
-
+    // set up encoder to describe how audio should be written
     ma_encoder_config wav_encoder_config = 
         ma_encoder_config_init(
             ma_encoding_format_wav,
@@ -133,35 +141,25 @@ int config_device()
             device.playback.channels,
             device.sampleRate 
     );
+    ma_encoder wav_encoder;
     
+    // open encoder file for writing
     if (ma_encoder_init_file("output.wav", &wav_encoder_config, &wav_encoder) != MA_SUCCESS) {
         std::cerr << "Failed to init wav encoder.\n";
         ma_device_uninit(&device);
         return -1;
+    }
+    // open raw log file for writing
+    std::ofstream file ("log.raw", std::ios::binary);
+    if (!file) {
+        std::cerr << "Warning: failed to open log.raw, no raw logs will be produced\n";
     }
 
     size_t sampleTime = 5;
 
     audio_log_buffer = std::make_unique<SPSCRingBuffer<StereoFrame>>(device.sampleRate * sampleTime * 2); //FIXME: multiplying gives slack but doesn't actually solve the risk of overflow from pipewire / your api of choice acting up. this is bad and wastes tons of memory but I'm leaving it like this for now / a while because I want to do other stuff
 
-    // start audio device
-    if (ma_device_start(&device) != MA_SUCCESS) {
-        std::cerr << "Failed to start wav miniaudio device.\n";
-        ma_encoder_uninit(&wav_encoder);
-        ma_device_uninit(&device);
-        return -1;
-    }
-
-    std::ofstream file ("log.raw", std::ios::binary);
-
-    if (!file) {
-        std::cerr << "Warning: failed to open log.raw, no raw logs will be produced\n";
-    }
-
-    StereoFrame frame;
-
-    auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-
+    // push events on queue
     event_queue->push({
         .type = EventType::NoteOn,
         .trigger_sample = 0,
@@ -174,7 +172,18 @@ int config_device()
         .trigger_sample = (uint64_t)(2.5 * audio_ctx->sample_rate)
     });
 
+    StereoFrame frame;
+    // start audio device - callback now active
+    if (ma_device_start(&device) != MA_SUCCESS) {
+        std::cerr << "Failed to start wav miniaudio device.\n";
+        ma_encoder_uninit(&wav_encoder);
+        ma_device_uninit(&device);
+        return -1;
+    }
+
+    auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     //FIXME: busy waiting will be a problem in the future
+    // while callback runs, write frames to wav and raw file every 10ms
     while (std::chrono::steady_clock::now() < end) {
         while (audio_log_buffer->pop(frame)) {
             file.write(reinterpret_cast<const char*>(&frame), sizeof(frame));
@@ -190,7 +199,7 @@ int config_device()
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
 
-    // stop audio device
+    // stop audio device - callback no longer active
     ma_device_stop(&device);
 
     // drain buffer
@@ -203,6 +212,8 @@ int config_device()
             nullptr
         );
     }
+    
+    // close resources
     file.close();
     ma_encoder_uninit(&wav_encoder); //TODO: RAII
     ma_device_uninit(&device);
