@@ -90,15 +90,20 @@ void build_patch(AudioContext* ctx)
     ctx->output_node = mixer;
 }
 
+std::unique_ptr<SPSCRingBuffer<ScheduledEvent>> init_event_queue(AudioContext* ctx, size_t capacity = 64)
+{
+    auto queue = std::make_unique<SPSCRingBuffer<ScheduledEvent>>(capacity);
+    ctx->event_queue = queue.get();
+    return queue;
+}
+
 int config_device()
 {
     auto audio_ctx = std::make_unique<AudioContext>();
     audio_ctx->sample_rate = 0.00f;
     
     build_patch(audio_ctx.get());
-
-    auto event_queue = std::make_unique<SPSCRingBuffer<ScheduledEvent>>(64);
-    audio_ctx->event_queue = event_queue.get();
+    auto event_queue = init_event_queue(audio_ctx.get());
 
     ma_device_config config = ma_device_config_init(ma_device_type_playback);
     config.playback.format   = ma_format_f32;
