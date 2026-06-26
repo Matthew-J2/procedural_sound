@@ -20,12 +20,17 @@ struct SineOscillator : Oscillator {
     float tick(float sample_rate) override {
         float sample = sinf(phase) * amplitude;
         phase += 2.0f * PI * frequency / sample_rate;
+
+    // this isn't inherited because it could be different
+    // for different oscillators e.g. noise, wavetable, PM
         if (phase > 2.0f * PI)
             phase -= 2.0f * PI;
         return sample;
     }
 };
 
+// TODO: Rename to IdealSquareOscillator or something like that
+// and use PolyBLEP or something for SquareOscillator
 struct SquareOscillator : Oscillator {
     using Oscillator::Oscillator;
     float tick(float sample_rate) override {
@@ -37,6 +42,7 @@ struct SquareOscillator : Oscillator {
     }
 };
 
+// TODO: Again, needs PolyBLEP or something
 struct TriangleOscillator : Oscillator {
     using Oscillator::Oscillator;
     float tick(float sample_rate) override {
