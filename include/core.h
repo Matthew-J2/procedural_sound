@@ -21,6 +21,7 @@ template <typename T> struct SPSCRingBuffer;
 
 using StereoFrame = AudioFrame<2>;
 struct AudioContext {
+    // contains state the audio callback needs
     float sample_rate;
     uint64_t current_sample = 0; // used for feedback loops
     std::shared_ptr<AudioNode> output_node;
@@ -33,10 +34,12 @@ struct AudioContext {
 
 template <typename T>
 struct SPSCRingBuffer{
+    // lock free queue for communicating between main thread and audio callback
     private:
         std::vector<T> data;
         size_t size; // capacity is size - 1 (one slot is always unused)
         size_t mask;
+        // avoid false sharing - force onto different cache lines
         alignas(std::hardware_destructive_interference_size) std::atomic<size_t> write {0};
         alignas(std::hardware_destructive_interference_size) std::atomic<size_t> read {0};
 
@@ -44,6 +47,7 @@ struct SPSCRingBuffer{
 
     public:
         SPSCRingBuffer(size_t requested_size){
+        // size needs to be power of 2 for modulo trick
             if (requested_size < 2)
                 requested_size = 2;
 
@@ -58,7 +62,7 @@ struct SPSCRingBuffer{
         size_t get_dropped() const;
 };
 
-// used by producer
+// used by producer thread only
 template <typename T>
 bool SPSCRingBuffer<T>::push(const T& in){
     size_t current_write = write.load(std::memory_order_relaxed);
@@ -69,7 +73,7 @@ bool SPSCRingBuffer<T>::push(const T& in){
 
     if (next_write == current_read){
         dropped.fetch_add(1, std::memory_order_relaxed);
-        return false; // buffer is full
+        return false; // buffer is full - add to dropped sample count
     }   
 
     data[current_write] = in;
@@ -77,7 +81,7 @@ bool SPSCRingBuffer<T>::push(const T& in){
     return true;
 }
 
-// used by consumer
+// used by consumer thread only
 template <typename T>
 bool SPSCRingBuffer<T>::pop(T& out){
     size_t current_write = write.load(std::memory_order_acquire);
@@ -91,6 +95,7 @@ bool SPSCRingBuffer<T>::pop(T& out){
     return true;
 }
 
+// read without advancing
 template <typename T>
 bool SPSCRingBuffer<T>::peek(T& out) const {
     size_t current_write = write.load(std::memory_order_acquire);
