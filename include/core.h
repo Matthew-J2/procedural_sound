@@ -8,6 +8,52 @@
 #include <new>
 #include <memory>
 
+struct RAIIDevice {
+    RAIIDevice(ma_device_config& cfg) {
+        if (ma_device_init(NULL, &cfg, &device) != MA_SUCCESS)
+            throw std::runtime_error("Failed to init miniaudio device.");
+    }
+
+    ~RAIIDevice() {
+        ma_device_uninit(&device);
+    }
+
+    RAIIDevice(const RAIIDevice&) = delete;
+
+    RAIIDevice& operator=(const RAIIDevice&) = delete;
+
+    ma_device* get() {
+        return &device;
+    }
+
+    ma_device* operator->() {
+        return &device;
+    }
+    private:
+        ma_device device;
+
+};
+
+struct RAIIEncoder {
+    RAIIEncoder(const char* filename, ma_encoder_config& cfg) {
+        if (ma_encoder_init_file(filename, &cfg, &encoder) != MA_SUCCESS)
+            throw std::runtime_error("Failed to init miniaudio encoder.");
+    }
+    ~RAIIEncoder() {
+        ma_encoder_uninit(&encoder);
+    }
+    RAIIEncoder(const RAIIEncoder&) = delete;
+    RAIIEncoder& operator=(const RAIIEncoder&) = delete;
+    ma_encoder* get() {
+        return &encoder;
+    }
+    ma_encoder* operator->() {
+        return &encoder;
+    }
+    private:
+        ma_encoder encoder;
+};
+
 template<size_t Channels>
 struct AudioFrame
 {

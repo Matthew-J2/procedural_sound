@@ -120,35 +120,26 @@ int config_device()
     config.dataCallback      = data_callback;
     config.pUserData         = audio_ctx.get();
 
-    ma_device device;
-    if (ma_device_init(NULL, &config, &device) != MA_SUCCESS) {
-        std::cerr << "Failed to init miniaudio device.";
-        return -1;
-    }
+    auto device = RAIIDevice(config);
     
     // defined by miniaudio device
-    audio_ctx->sample_rate = (float)device.sampleRate;
+    audio_ctx->sample_rate = (float)device->sampleRate;
 
-    std::cout << "sample rate: " << device.sampleRate << "\n";
-    std::cout << "channels: " << device.playback.channels << "\n";
-    std::cout << "format: " << device.playback.format << "\n";
+    std::cout << "sample rate: " << device->sampleRate << "\n";
+    std::cout << "channels: " << device->playback.channels << "\n";
+    std::cout << "format: " << device->playback.format << "\n";
 
     // set up encoder to describe how audio should be written
     ma_encoder_config wav_encoder_config = 
         ma_encoder_config_init(
             ma_encoding_format_wav,
-            device.playback.format,
-            device.playback.channels,
-            device.sampleRate 
+            device->playback.format,
+            device->playback.channels,
+            device->sampleRate 
     );
-    ma_encoder wav_encoder;
     
     // open encoder file for writing
-    if (ma_encoder_init_file("output.wav", &wav_encoder_config, &wav_encoder) != MA_SUCCESS) {
-        std::cerr << "Failed to init wav encoder.\n";
-        ma_device_uninit(&device);
-        return -1;
-    }
+    auto wav_encoder = RAIIEncoder("output.wav", wav_encoder_config) ;
     // open raw log file for writing
     std::ofstream file ("log.raw", std::ios::binary);
     if (!file) {
@@ -157,7 +148,7 @@ int config_device()
 
     size_t sampleTime = 5;
 
-    audio_ctx->audio_log_buffer = std::make_unique<SPSCRingBuffer<StereoFrame>>(device.sampleRate * sampleTime * 2); //FIXME: multiplying gives slack but doesn't actually solve the risk of overflow from pipewire / your api of choice acting up. this is bad and wastes tons of memory but I'm leaving it like this for now / a while because I want to do other stuff
+    audio_ctx->audio_log_buffer = std::make_unique<SPSCRingBuffer<StereoFrame>>(device->sampleRate * sampleTime * 2); //FIXME: multiplying gives slack but doesn't actually solve the risk of overflow from pipewire / your api of choice acting up. this is bad and wastes tons of memory but I'm leaving it like this for now / a while because I want to do other stuff
 
     // push events on queue
     event_queue->push({
@@ -174,10 +165,8 @@ int config_device()
 
     StereoFrame frame;
     // start audio device - callback now active
-    if (ma_device_start(&device) != MA_SUCCESS) {
-        std::cerr << "Failed to start wav miniaudio device.\n";
-        ma_encoder_uninit(&wav_encoder);
-        ma_device_uninit(&device);
+    if (ma_device_start(device.get()) != MA_SUCCESS) {
+        std::cerr << "Failed to start miniaudio playback device.\n";
         return -1;
     }
 
@@ -188,7 +177,7 @@ int config_device()
         while (audio_ctx->audio_log_buffer->pop(frame)) {
             file.write(reinterpret_cast<const char*>(&frame), sizeof(frame));
             ma_encoder_write_pcm_frames(
-                &wav_encoder,
+                wav_encoder.get(),
                 frame.samples,
                 1,
                 nullptr
@@ -200,23 +189,18 @@ int config_device()
     }
 
     // stop audio device - callback no longer active
-    ma_device_stop(&device);
+    ma_device_stop(device.get());
 
     // drain buffer
     while (audio_ctx->audio_log_buffer->pop(frame)) {
         file.write(reinterpret_cast<const char*>(&frame), sizeof(frame));
         ma_encoder_write_pcm_frames(
-            &wav_encoder,
+            wav_encoder.get(),
             frame.samples,
             1,
             nullptr
         );
     }
-    
-    // close resources
-    file.close();
-    ma_encoder_uninit(&wav_encoder); //TODO: RAII
-    ma_device_uninit(&device);
 
     std::cout << "dropped samples: " << audio_ctx->audio_log_buffer->get_dropped() << "\n";
     return 0;
