@@ -79,6 +79,7 @@ FetchContent_MakeAvailable(googletest)
 add_executable(unit_tests
     tests/test_main.cpp
     tests/test_oscillator.cpp
+    tests/test_core.cpp
 )
 
 target_link_libraries(unit_tests PRIVATE
