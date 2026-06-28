@@ -11,10 +11,7 @@
 using StereoFrame = AudioFrame<2>;
 
 void dispatch_due_events(AudioContext* ctx, 
-                         SPSCRingBuffer<ScheduledEvent>& queue,
-                         std::shared_ptr<OscillatorNode>& osc, 
-                         std::shared_ptr<GateNode>& gate,
-                         std::shared_ptr<EnvelopeNode>& envelope) {
+                         SPSCRingBuffer<ScheduledEvent>& queue) {
     // Looks at next scheduled event and if it exists and is due, 
     // run event and remove from queue
     ScheduledEvent ev;
@@ -22,22 +19,30 @@ void dispatch_due_events(AudioContext* ctx,
         queue.pop(ev);
 
         switch (ev.type) {
-            case EventType::GateOn:
-                osc->osc->frequency = ev.frequency;
-                osc->osc->amplitude = ev.amplitude;
-                osc->osc->phase = 0.0f;
-                gate->active = true;
-                break;
-            case EventType::GateOff:
-                gate->active = false;
-                break;
+            // case EventType::GateOn:
+            //     osc->osc->frequency = ev.frequency;
+            //     osc->osc->amplitude = ev.amplitude;
+            //     osc->osc->phase = 0.0f;
+            //     gate->active = true;
+            //     break;
+            // case EventType::GateOff:
+            //     gate->active = false;
+            //     break;
             case EventType::NoteOn:
-                osc->osc->frequency = ev.frequency;
-                osc->osc->phase = 0.0f;
-                envelope->trigger(ev.amplitude);
+                for (auto& voice : ctx->voices) {
+                    if (voice.is_idle()) {
+                        voice.trigger(ev.note_id, ev.frequency, ev.amplitude);
+                        break;
+                    }
+                }
                 break;
             case EventType::NoteOff:
-                envelope->release();
+                for (auto& voice : ctx->voices) {
+                    if (voice.note_id == ev.note_id) {
+                        voice.release();
+                        break;
+                    }
+                }
                 break;
         }
     }
@@ -56,7 +61,7 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
     for (ma_uint32 i = 0; i < frameCount; i++)
     {
         audio_ctx->current_sample++;
-        dispatch_due_events(audio_ctx, *audio_ctx->event_queue, audio_ctx->osc_node, audio_ctx->gate, audio_ctx->envelope);
+        dispatch_due_events(audio_ctx, *audio_ctx->event_queue);
         float sample = audio_ctx->output_node->pull();
 
         StereoFrame frame;
@@ -91,18 +96,24 @@ void build_patch(AudioContext* ctx)
     auto saw_gate = std::make_shared<GateNode>(saw, ctx);
     saw_gate->active = true;
 
-    ctx->gate = saw_gate;
+    mixer->inputs.push_back(sine);
+    mixer->inputs.push_back(square);
+    mixer->inputs.push_back(saw_gate);
 
-    auto triangle_adsr = std::make_shared<EnvelopeNode>(triangle, ctx, ADSR(0.01, 0.35f, 0.0f, 0.5f));
+    int MaxVoices = 32;
+    ctx->voices.reserve(MaxVoices);
+    
+    for (int i = 0; i < MaxVoices; i++) {
+        auto osc = std::make_shared<OscillatorNode>(
+            std::make_unique<TriangleOscillator>(0.0f, 1.0f), ctx  // frequency set per-note via trigger()
+        );
+        auto envelope = std::make_shared<EnvelopeNode>(
+            osc, ctx, ADSR(0.5f, 0.35f, 0.5f, 0.5f)
+        );
 
-    ctx->osc_node = triangle;
-
-    ctx->envelope = triangle_adsr;
-
-    // mixer->inputs.push_back(sine);
-    // mixer->inputs.push_back(square);
-    mixer->inputs.push_back(triangle_adsr);
-    // mixer->inputs.push_back(saw_gate);
+        mixer->inputs.push_back(envelope);
+        ctx->voices.push_back(Voice{osc, envelope});
+    }
 
     ctx->output_node = mixer;
 }
@@ -168,21 +179,51 @@ int config_device()
     event_queue->push({
         .type = EventType::NoteOn,
         .trigger_sample = 0,
-        .frequency = 261.63f,
+        .note_id = 1,
+        .frequency = 261.63f, // C4
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(0.5 * audio_ctx->sample_rate),
+        .note_id = 2,
+        .frequency = 329.63f, // E4
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(1.0 * audio_ctx->sample_rate),
+        .note_id = 3,
+        .frequency = 392.00f, // G4
         .amplitude = 0.3f
     });
 
     event_queue->push({
         .type = EventType::NoteOff,
-        .trigger_sample = (uint64_t)(2.5 * audio_ctx->sample_rate)
+        .trigger_sample = (uint64_t)(2.0 * audio_ctx->sample_rate),
+        .note_id = 1 // C4 release
     });
 
-    StereoFrame frame;
-    // start audio device - callback now active
-    if (ma_device_start(device.get()) != MA_SUCCESS) {
-        std::cerr << "Failed to start miniaudio playback device.\n";
-        return -1;
-    }
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(2.5 * audio_ctx->sample_rate),
+        .note_id = 2 // E4 release
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(3.0 * audio_ctx->sample_rate),
+        .note_id = 3 // G4 release
+    });
+
+        StereoFrame frame;
+        // start audio device - callback now active
+        if (ma_device_start(device.get()) != MA_SUCCESS) {
+            std::cerr << "Failed to start miniaudio playback device.\n";
+            return -1;
+        }
 
     auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     //FIXME: busy waiting will be a problem in the future
