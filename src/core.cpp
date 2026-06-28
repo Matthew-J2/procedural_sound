@@ -13,7 +13,8 @@ using StereoFrame = AudioFrame<2>;
 void dispatch_due_events(AudioContext* ctx, 
                          SPSCRingBuffer<ScheduledEvent>& queue,
                          std::shared_ptr<OscillatorNode>& osc, 
-                         std::shared_ptr<GateNode>& gate) {
+                         std::shared_ptr<GateNode>& gate,
+                         std::shared_ptr<EnvelopeNode>& envelope) {
     // Looks at next scheduled event and if it exists and is due, 
     // run event and remove from queue
     ScheduledEvent ev;
@@ -21,14 +22,22 @@ void dispatch_due_events(AudioContext* ctx,
         queue.pop(ev);
 
         switch (ev.type) {
-            case EventType::NoteOn:
+            case EventType::GateOn:
                 osc->osc->frequency = ev.frequency;
                 osc->osc->amplitude = ev.amplitude;
                 osc->osc->phase = 0.0f;
                 gate->active = true;
                 break;
-            case EventType::NoteOff:
+            case EventType::GateOff:
                 gate->active = false;
+                break;
+            case EventType::NoteOn:
+                osc->osc->frequency = ev.frequency;
+                osc->osc->phase = 0.0f;
+                envelope->trigger(ev.amplitude);
+                break;
+            case EventType::NoteOff:
+                envelope->release();
                 break;
         }
     }
@@ -47,7 +56,7 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
     for (ma_uint32 i = 0; i < frameCount; i++)
     {
         audio_ctx->current_sample++;
-        dispatch_due_events(audio_ctx, *audio_ctx->event_queue, audio_ctx->osc_node, audio_ctx->gate);
+        dispatch_due_events(audio_ctx, *audio_ctx->event_queue, audio_ctx->osc_node, audio_ctx->gate, audio_ctx->envelope);
         float sample = audio_ctx->output_node->pull();
 
         StereoFrame frame;
@@ -73,7 +82,7 @@ void build_patch(AudioContext* ctx)
         std::make_unique<SquareOscillator>(164.81f, 0.02f), ctx
     );
     auto triangle = std::make_shared<OscillatorNode>(
-        std::make_unique<TriangleOscillator>(196.00f, 0.02f), ctx
+        std::make_unique<TriangleOscillator>(196.00f, 1.0f), ctx
     );
     auto saw = std::make_shared<OscillatorNode>(
         std::make_unique<SawOscillator>(261.63f, 0.02f), ctx
@@ -82,13 +91,18 @@ void build_patch(AudioContext* ctx)
     auto saw_gate = std::make_shared<GateNode>(saw, ctx);
     saw_gate->active = true;
 
-    ctx->osc_node = saw;
     ctx->gate = saw_gate;
 
-    mixer->inputs.push_back(sine);
-    mixer->inputs.push_back(square);
-    mixer->inputs.push_back(triangle);
-    mixer->inputs.push_back(saw_gate);
+    auto triangle_adsr = std::make_shared<EnvelopeNode>(triangle, ctx, ADSR(0.01, 0.35f, 0.0f, 0.5f));
+
+    ctx->osc_node = triangle;
+
+    ctx->envelope = triangle_adsr;
+
+    // mixer->inputs.push_back(sine);
+    // mixer->inputs.push_back(square);
+    mixer->inputs.push_back(triangle_adsr);
+    // mixer->inputs.push_back(saw_gate);
 
     ctx->output_node = mixer;
 }
@@ -155,7 +169,7 @@ int config_device()
         .type = EventType::NoteOn,
         .trigger_sample = 0,
         .frequency = 261.63f,
-        .amplitude = 0.02f
+        .amplitude = 0.3f
     });
 
     event_queue->push({

@@ -63,6 +63,7 @@ struct AudioFrame
 struct AudioNode;
 struct OscillatorNode;
 struct GateNode;
+struct EnvelopeNode;
 template <typename T> struct SPSCRingBuffer;
 
 using StereoFrame = AudioFrame<2>;
@@ -75,6 +76,7 @@ struct AudioContext {
     SPSCRingBuffer<ScheduledEvent>* event_queue = nullptr;
     std::shared_ptr<OscillatorNode> osc_node;
     std::shared_ptr<GateNode> gate;
+    std::shared_ptr<EnvelopeNode> envelope;
     std::unique_ptr<SPSCRingBuffer<StereoFrame>> audio_log_buffer;
 };
 

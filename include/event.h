@@ -2,8 +2,10 @@
 #include <cstdint>
 
 enum class EventType {
+    GateOn,
+    GateOff,
     NoteOn,
-    NoteOff,
+    NoteOff
     // SetFrequency
 };
 

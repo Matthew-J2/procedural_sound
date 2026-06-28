@@ -3,7 +3,7 @@
 #include <memory>   
 #include "core.h"
 #include "oscillator.h"
-
+#include "envelope.h"
 
 struct AudioNode {
     std::vector<std::shared_ptr<AudioNode>> inputs;
@@ -66,5 +66,27 @@ struct GateNode : AudioNode {
         // but more accurate to how synths work
         float sample = inputs[0]->pull();
         return active ? sample : 0.0f;
+    }
+};
+
+// one input. trigger, release and tick are handled by ADSR struct
+struct EnvelopeNode : AudioNode {
+    ADSR adsr;
+
+    EnvelopeNode(std::shared_ptr<AudioNode> source, AudioContext* ctx, ADSR envelope = ADSR()): adsr(envelope) {
+        inputs.push_back(source);
+        this->ctx = ctx;
+    }
+
+    void trigger(float peak) {
+        adsr.trigger(peak);
+    }
+
+    void release() {
+        adsr.release();
+    }
+
+    float process() override {
+        return inputs[0]-> pull() * adsr.tick(ctx->sample_rate);
     }
 };
