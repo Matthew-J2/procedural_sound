@@ -2,6 +2,7 @@
 #include "oscillator.h"
 #include "graph.h"
 #include "event.h"
+#include "midi.h"
 #include <memory>
 #include <thread>
 #include <chrono>
@@ -10,26 +11,15 @@
 
 using StereoFrame = AudioFrame<2>;
 
-void dispatch_due_events(AudioContext* ctx, 
-                         SPSCRingBuffer<ScheduledEvent>& queue) {
-    // Looks at next scheduled event and if it exists and is due, 
-    // run event and remove from queue
+void dispatch_due_events(AudioContext* ctx, SPSCRingBuffer<ScheduledEvent>& queue) {
     ScheduledEvent ev;
     while (queue.peek(ev) && ev.trigger_sample <= ctx->current_sample) {
         queue.pop(ev);
+        auto& pool = ctx->instrument_voice_pools[ev.instrument_index];
 
         switch (ev.type) {
-            // case EventType::GateOn:
-            //     osc->osc->frequency = ev.frequency;
-            //     osc->osc->amplitude = ev.amplitude;
-            //     osc->osc->phase = 0.0f;
-            //     gate->active = true;
-            //     break;
-            // case EventType::GateOff:
-            //     gate->active = false;
-            //     break;
             case EventType::NoteOn:
-                for (auto& voice : ctx->voices) {
+                for (auto& voice : pool) {
                     if (voice.is_idle()) {
                         voice.trigger(ev.note_id, ev.frequency, ev.amplitude);
                         break;
@@ -37,7 +27,7 @@ void dispatch_due_events(AudioContext* ctx,
                 }
                 break;
             case EventType::NoteOff:
-                for (auto& voice : ctx->voices) {
+                for (auto& voice : pool) {
                     if (voice.note_id == ev.note_id) {
                         voice.release();
                         break;
@@ -81,16 +71,16 @@ void build_patch(AudioContext* ctx)
 
     // Create oscillators, put in mixer, put mixer in context as output node.
     auto sine = std::make_shared<OscillatorNode>(
-        std::make_unique<SineOscillator>(130.81f, 0.02f), ctx
+        std::make_unique<SineOscillator>(note_frequency("C3"), 0.02f), ctx
     );
     auto square = std::make_shared<OscillatorNode>(
-        std::make_unique<SquareOscillator>(164.81f, 0.02f), ctx
+        std::make_unique<SquareOscillator>(note_frequency("E3"), 0.02f), ctx
     );
     auto triangle = std::make_shared<OscillatorNode>(
-        std::make_unique<TriangleOscillator>(196.00f, 1.0f), ctx
+        std::make_unique<TriangleOscillator>(note_frequency("G3"), 1.0f), ctx
     );
     auto saw = std::make_shared<OscillatorNode>(
-        std::make_unique<SawOscillator>(261.63f, 0.02f), ctx
+        std::make_unique<SawOscillator>(note_frequency("C4"), 0.02f), ctx
     );
 
     auto saw_gate = std::make_shared<GateNode>(saw, ctx);
@@ -100,8 +90,10 @@ void build_patch(AudioContext* ctx)
     mixer->inputs.push_back(square);
     mixer->inputs.push_back(saw_gate);
 
+    ctx->instrument_voice_pools.push_back({});
     int MaxVoices = 32;
-    ctx->voices.reserve(MaxVoices);
+    ctx->instrument_voice_pools[0].reserve(MaxVoices);
+    ctx->instrument_index_names["pad"] = 0;
     
     for (int i = 0; i < MaxVoices; i++) {
         auto osc = std::make_shared<OscillatorNode>(
@@ -112,7 +104,23 @@ void build_patch(AudioContext* ctx)
         );
 
         mixer->inputs.push_back(envelope);
-        ctx->voices.push_back(Voice{osc, envelope});
+        ctx->instrument_voice_pools[0].push_back(Voice{osc, envelope});
+    }
+    
+    ctx->instrument_voice_pools.push_back({});
+    constexpr int MaxPluckVoices = 16;
+    ctx->instrument_voice_pools[1].reserve(MaxPluckVoices);
+    ctx->instrument_index_names["pluck"] = 1;
+
+    for (int i = 0; i < MaxPluckVoices; i++) {
+        auto osc = std::make_shared<OscillatorNode>(
+            std::make_unique<SawOscillator>(0.0f, 1.0f), ctx
+        );
+        auto envelope = std::make_shared<EnvelopeNode>(
+            osc, ctx, ADSR(0.002f, 0.15f, 0.0f, 0.05f) 
+        );
+        mixer->inputs.push_back(envelope);
+        ctx->instrument_voice_pools[1].push_back(Voice{osc, envelope});
     }
 
     ctx->output_node = mixer;
@@ -171,7 +179,7 @@ int config_device()
         std::cerr << "Warning: failed to open log.raw, no raw logs will be produced\n";
     }
 
-    size_t sampleTime = 5;
+    size_t sampleTime = 20;
 
     audio_ctx->audio_log_buffer = std::make_unique<SPSCRingBuffer<StereoFrame>>(device->sampleRate * sampleTime * 2); //FIXME: multiplying gives slack but doesn't actually solve the risk of overflow from pipewire / your api of choice acting up. this is bad and wastes tons of memory but I'm leaving it like this for now / a while because I want to do other stuff
 
@@ -179,43 +187,243 @@ int config_device()
     event_queue->push({
         .type = EventType::NoteOn,
         .trigger_sample = 0,
+        .instrument_index = 0,
         .note_id = 1,
-        .frequency = 261.63f, // C4
+        .frequency = note_frequency("C4"), // C4
         .amplitude = 0.3f
     });
 
     event_queue->push({
         .type = EventType::NoteOn,
         .trigger_sample = (uint64_t)(0.5 * audio_ctx->sample_rate),
+        .instrument_index = 0,
         .note_id = 2,
-        .frequency = 329.63f, // E4
+        .frequency = note_frequency("E4"), // E4
         .amplitude = 0.3f
     });
 
     event_queue->push({
         .type = EventType::NoteOn,
         .trigger_sample = (uint64_t)(1.0 * audio_ctx->sample_rate),
+        .instrument_index = 0,
         .note_id = 3,
-        .frequency = 392.00f, // G4
+        .frequency = note_frequency("G4"), // G4
         .amplitude = 0.3f
     });
 
     event_queue->push({
         .type = EventType::NoteOff,
         .trigger_sample = (uint64_t)(2.0 * audio_ctx->sample_rate),
+        .instrument_index = 0,
         .note_id = 1 // C4 release
     });
 
     event_queue->push({
         .type = EventType::NoteOff,
         .trigger_sample = (uint64_t)(2.5 * audio_ctx->sample_rate),
+        .instrument_index = 0,
         .note_id = 2 // E4 release
     });
 
     event_queue->push({
         .type = EventType::NoteOff,
         .trigger_sample = (uint64_t)(3.0 * audio_ctx->sample_rate),
+        .instrument_index = 0,
         .note_id = 3 // G4 release
+    });
+
+    // let's do half a 24-TET scale for funsies
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(4.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 4,
+        .frequency = midi_to_frequency(60),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(4.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 4
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(5.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 5,
+        .frequency = midi_to_frequency(60.5),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(5.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 5
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(6.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 6,
+        .frequency = midi_to_frequency(61),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(6.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 6
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(7.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 7,
+        .frequency = midi_to_frequency(61.5),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(7.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 7
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(8.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 8,
+        .frequency = midi_to_frequency(62),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(8.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 8
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(9.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 9,
+        .frequency = midi_to_frequency(62.5),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(9.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 9
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(10.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 10,
+        .frequency = midi_to_frequency(63),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(10.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 10
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(11.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 11,
+        .frequency = midi_to_frequency(63.5),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(11.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 11
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(12.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 12,
+        .frequency = midi_to_frequency(64),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(12.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 12
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(13.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 13,
+        .frequency = midi_to_frequency(64.5),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(13.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 13
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(14.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 14,
+        .frequency = midi_to_frequency(65),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(14.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 14
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(15.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 15,
+        .frequency = midi_to_frequency(65.5),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(15.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 15
     });
 
         StereoFrame frame;
@@ -225,7 +433,7 @@ int config_device()
             return -1;
         }
 
-    auto end = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    auto end = std::chrono::steady_clock::now() + std::chrono::seconds(sampleTime);
     //FIXME: busy waiting will be a problem in the future
     // while callback runs, write frames to wav and raw file every 10ms
     while (std::chrono::steady_clock::now() < end) {

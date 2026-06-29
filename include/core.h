@@ -7,6 +7,7 @@
 #include <bit>
 #include <new>
 #include <memory>
+#include <unordered_map>
 
 struct RAIIDevice {
     RAIIDevice(ma_device_config& cfg) {
@@ -72,7 +73,8 @@ struct AudioContext {
     std::shared_ptr<AudioNode> output_node;
 
     SPSCRingBuffer<ScheduledEvent>* event_queue = nullptr;
-    std::vector<Voice> voices;
+    std::vector<std::vector<Voice>> instrument_voice_pools;
+    std::unordered_map<std::string, int> instrument_index_names;
     std::unique_ptr<SPSCRingBuffer<StereoFrame>> audio_log_buffer;
 };
 
