@@ -117,7 +117,7 @@ void build_patch(AudioContext* ctx)
             std::make_unique<SawOscillator>(0.0f, 1.0f), ctx
         );
         auto envelope = std::make_shared<EnvelopeNode>(
-            osc, ctx, ADSR(0.002f, 0.15f, 0.0f, 0.05f) 
+            osc, ctx, ADSR(0.002f, 0.35f, 0.0f, 0.35f) 
         );
         mixer->inputs.push_back(envelope);
         ctx->instrument_voice_pools[1].push_back(Voice{osc, envelope});
