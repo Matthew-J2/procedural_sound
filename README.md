@@ -20,6 +20,4 @@ As of 30/06/2026, it
 
 ## How to build it?
 Just run run.sh with either release or debug as an argument.
-You will need a compiler and libc++/libstdc++ that implements C++23, CMake, and Ninja. 
-I haven't tested if it builds on anything but openSUSE Tumbleweed with clang++ and libstdc++, so pretty much the most recent release of both of those. 
-I don't see why it wouldn't work with GCC or MSVC but again, haven't tested it. I'll set up some CI runners when I get around to it.
+You will need a compiler and libc++/libstdc++ that implements C++23. You will need CMake and Ninja. <br><br>I haven't tested if it builds on anything but openSUSE Tumbleweed with clang++ and libstdc++, so pretty much the most recent release of both of those. <br><br>I don't see why it wouldn't work with GCC or MSVC but again, haven't tested it. I'll set up some CI runners when I get around to it.
