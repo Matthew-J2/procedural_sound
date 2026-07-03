@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <functional>
 
 enum class EventType {
     // GateOn,
@@ -17,3 +18,5 @@ struct ScheduledEvent {
     float frequency = 0.0f;
     float amplitude = 0.0f;
 };
+
+

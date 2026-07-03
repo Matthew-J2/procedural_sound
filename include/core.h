@@ -1,6 +1,7 @@
 #pragma once
 #include "oscillator.h"
 #include "event.h"
+#include "voice.h"
 #include <miniaudio.h>
 #include <vector>
 #include <atomic>
@@ -62,7 +63,6 @@ struct AudioFrame
 };
 
 struct AudioNode;
-struct Voice;
 template <typename T> struct SPSCRingBuffer;
 
 using StereoFrame = AudioFrame<2>;

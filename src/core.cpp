@@ -3,6 +3,7 @@
 #include "graph.h"
 #include "event.h"
 #include "midi.h"
+#include "instrument.h"
 #include <memory>
 #include <thread>
 #include <chrono>
@@ -90,41 +91,20 @@ void build_patch(AudioContext* ctx)
     mixer->inputs.push_back(square);
     mixer->inputs.push_back(saw_gate);
 
-    ctx->instrument_voice_pools.push_back({});
-    int MaxVoices = 32;
-    ctx->instrument_voice_pools[0].reserve(MaxVoices);
-    ctx->instrument_index_names["pad"] = 0;
-    
-    for (int i = 0; i < MaxVoices; i++) {
-        auto osc = std::make_shared<OscillatorNode>(
-            std::make_unique<TriangleOscillator>(0.0f, 1.0f), ctx  // frequency set per-note via trigger()
-        );
-        auto envelope = std::make_shared<EnvelopeNode>(
-            osc, ctx, ADSR(0.5f, 0.35f, 0.5f, 0.5f)
-        );
+    register_instrument(ctx, build_instrument(
+        ctx, mixer, "pad", 32,
+        [] { return std::make_unique<TriangleOscillator>(0.0f, 1.0f); },
+        ADSR(0.5f, 0.35f, 0.5f, 0.5f)
+    ));
 
-        mixer->inputs.push_back(envelope);
-        ctx->instrument_voice_pools[0].push_back(Voice{osc, envelope});
+    register_instrument(ctx, build_instrument(
+        ctx, mixer, "pluck", 16,
+        [] { return std::make_unique<SawOscillator>(0.0f, 1.0f); },
+        ADSR(0.002f, 0.35f, 0.0f, 0.35f)
+    ));
+
+        ctx->output_node = mixer;
     }
-    
-    ctx->instrument_voice_pools.push_back({});
-    constexpr int MaxPluckVoices = 16;
-    ctx->instrument_voice_pools[1].reserve(MaxPluckVoices);
-    ctx->instrument_index_names["pluck"] = 1;
-
-    for (int i = 0; i < MaxPluckVoices; i++) {
-        auto osc = std::make_shared<OscillatorNode>(
-            std::make_unique<SawOscillator>(0.0f, 1.0f), ctx
-        );
-        auto envelope = std::make_shared<EnvelopeNode>(
-            osc, ctx, ADSR(0.002f, 0.35f, 0.0f, 0.35f) 
-        );
-        mixer->inputs.push_back(envelope);
-        ctx->instrument_voice_pools[1].push_back(Voice{osc, envelope});
-    }
-
-    ctx->output_node = mixer;
-}
 
 std::unique_ptr<SPSCRingBuffer<ScheduledEvent>> init_event_queue(AudioContext* ctx, size_t capacity = 64)
 {

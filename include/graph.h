@@ -91,24 +91,4 @@ struct EnvelopeNode : AudioNode {
     }
 };
 
-struct Voice {
-    std::shared_ptr<OscillatorNode> osc;
-    std::shared_ptr<EnvelopeNode> envelope;
 
-    int note_id = -1; // unassigned
-
-    void trigger(int id, float frequency, float amplitude) {
-        note_id = id;
-        osc->osc->frequency = frequency;
-        osc->osc->phase = 0.0f;
-        envelope->trigger(amplitude);
-    }
-
-    void release() {
-        envelope->release();
-    }
-
-    bool is_idle() const {
-        return envelope->adsr.is_idle(); // checkADSR release is done
-    }
-};
