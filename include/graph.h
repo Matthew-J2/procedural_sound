@@ -85,6 +85,16 @@ struct GateNode : AudioNode {
     }
 };
 
+struct ConstantNode : AudioNode {
+    float value;
+
+    ConstantNode(float value, AudioContext* ctx) : value(value) {
+        this->ctx = ctx;
+    }
+
+    float process() override { return value; }
+};
+
 // one input. trigger, release and tick are handled by ADSR struct
 struct EnvelopeNode : AudioNode {
     ADSR adsr;

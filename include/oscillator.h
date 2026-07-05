@@ -23,8 +23,11 @@ struct SineOscillator : Oscillator {
 
     // this isn't inherited because it could be different
     // for different oscillators e.g. noise, wavetable, PM
-        if (phase > 2.0f * PI)
-            phase -= 2.0f * PI;
+
+        phase = fmodf(phase, 2.0f * PI);
+        if (phase < 0.0f)
+            phase += 2.0f * PI;
+
         return sample;
     }
 };
@@ -36,8 +39,9 @@ struct SquareOscillator : Oscillator {
     float tick(float sample_rate) override {
         float sample = (phase < PI ? 1.0 : -1.0f) * amplitude;
         phase += 2.0 * PI * frequency / sample_rate;
-        if (phase > 2.0f * PI)
-            phase -= 2.0f * PI;
+        phase = fmodf(phase, 2.0f * PI);
+        if (phase < 0.0f)
+            phase += 2.0f * PI;
         return sample;
     }
 };
@@ -57,8 +61,9 @@ struct TriangleOscillator : Oscillator {
         sample *= amplitude;
 
         phase += 2.0f * PI * frequency / sample_rate;
-        if (phase > 2.0f * PI)
-            phase -= 2.0f * PI;
+        phase = fmodf(phase, 2.0f * PI);
+        if (phase < 0.0f)
+            phase += 2.0f * PI;
 
         return sample;
     }
@@ -69,8 +74,9 @@ struct SawOscillator : Oscillator {
     float tick(float sample_rate) override {
         float sample = (phase / PI - 1.0f) * amplitude;
         phase += 2.0f * PI * frequency / sample_rate;
-        if (phase > 2.0f * PI)
-            phase -= 2.0f * PI;
+        phase = fmodf(phase, 2.0f * PI);
+        if (phase < 0.0f)
+            phase += 2.0f * PI;
         return sample;
     }
 };
