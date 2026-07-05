@@ -12,6 +12,11 @@ struct AudioNode {
     virtual float process() = 0;
     virtual ~AudioNode() = default;
 
+
+    virtual int param_count() const { return 0; }
+    virtual void set_param(int /*local_index*/, float /* value */) {}
+    virtual std::string_view param_name(int /* local_index */) const { return {}; }
+
     float pull() {
         if (ctx->current_sample == last_ticked_sample)
             return cached_output; // if there's a feedback loop calculate it next sample
@@ -67,6 +72,17 @@ struct GateNode : AudioNode {
         float sample = inputs[0]->pull();
         return active ? sample : 0.0f;
     }
+    
+    int param_count() const override { return 1; }
+
+    void set_param(int local_index, float value) override {
+        if (local_index == 0)
+            active = (value != 0.0f);
+    }
+
+    std::string_view param_name(int local_index) const override {
+        return local_index == 0 ? std::string_view("active") : std::string_view();
+    }
 };
 
 // one input. trigger, release and tick are handled by ADSR struct
@@ -88,6 +104,27 @@ struct EnvelopeNode : AudioNode {
 
     float process() override {
         return inputs[0]-> pull() * adsr.tick(ctx->sample_rate);
+    }
+
+    int param_count() const override { return 4; }
+
+    void set_param(int local_index, float value) override {
+        switch (local_index) {
+            case 0: adsr.attack_time = value;   break;
+            case 1: adsr.decay_time = value;    break;
+            case 2: adsr.sustain_level = value; break;
+            case 3: adsr.release_time = value;  break;
+        }
+    }
+
+    std::string_view param_name(int local_index) const override {
+        switch (local_index) {
+            case 0: return "attack";
+            case 1: return "decay";
+            case 2: return "sustain";
+            case 3: return "release";
+            default: return {};
+        }
     }
 };
 

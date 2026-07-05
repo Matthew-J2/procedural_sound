@@ -1,14 +1,59 @@
 #pragma once
 #include <memory>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <stdexcept>
 #include "graph.h"
 
-enum class EnvelopeParam : int { Attack, Decay, Sustain, Release };
+// takes previous node, context, returns new node.
+using NodeFactory = std::function<std::shared_ptr<AudioNode>(std::shared_ptr<AudioNode> input, AudioContext* ctx)>;
 
-Voice make_oscillator_envelope_voice(std::shared_ptr<OscillatorNode> osc, std::shared_ptr<EnvelopeNode> env);
+// turns nodes' parameter lists into one flat list of named parameters per instrument
+struct ParamMap {
+    struct Entry { std::shared_ptr<AudioNode> node; int local_index; };
 
+    // table
+    std::vector<Entry> entries;
+    // lookup
+    std::unordered_map<std::string, int> name_to_id;
+    
+    // add entry to parameter table. call for each node in voice chain
+    void add_node(std::shared_ptr<AudioNode> node) {
+        int count = node-> param_count();
+        for (int local_index = 0; local_index < count; local_index++) {
+            int global_id = static_cast<int>(entries.size());
+            std::string_view name = node-> param_name(local_index);
+            entries.push_back({node, local_index});
+            if (!name.empty())
+                name_to_id.emplace(std::string(name), global_id);
+        }
+    }
+
+    // check which node to change, call with local index
+    void set(int global_id, float value) const {
+        if (global_id < 0 || static_cast<size_t>(global_id) >= entries.size())
+            return; // unknown id
+        const Entry& e = entries[global_id];
+        e.node->set_param(e.local_index, value);
+    }
+
+    // check name -> id in events
+    int id_for(std::string_view name) const {
+        auto it = name_to_id.find(std::string(name));
+        if (it == name_to_id.end())
+            throw std::invalid_argument("ParamMap: unknown parameter name");
+        return it->second;
+    }
+};
+
+Voice make_oscillator_envelope_voice(std::shared_ptr<OscillatorNode> osc, std::shared_ptr<EnvelopeNode> env, std::shared_ptr<ParamMap> params);
+
+// Named collection of voices and a parameter name table.
 struct Instrument {
     std::string name;
     std::vector<Voice> voices;
+    std::unordered_map<std::string, int> param_names;
 };
 
 Instrument build_instrument(AudioContext* ctx,
@@ -16,6 +61,9 @@ Instrument build_instrument(AudioContext* ctx,
                              std::string name,
                              int voice_count,
                              std::function<std::unique_ptr<Oscillator>()> make_osc,
-                             ADSR envelope);
+                             ADSR envelope,
+                             std::vector<NodeFactory> extra_nodes = {});
 
 void register_instrument(AudioContext* ctx, Instrument instrument);
+
+int param_id(AudioContext* ctx, int instrument_index, std::string_view name);

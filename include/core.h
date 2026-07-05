@@ -75,6 +75,7 @@ struct AudioContext {
     SPSCRingBuffer<ScheduledEvent>* event_queue = nullptr;
     std::vector<std::vector<Voice>> instrument_voice_pools;
     std::unordered_map<std::string, int> instrument_index_names;
+    std::vector<std::unordered_map<std::string, int>> instrument_param_names;
     std::unique_ptr<SPSCRingBuffer<StereoFrame>> audio_log_buffer;
 };
 

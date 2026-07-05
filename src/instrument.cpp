@@ -1,8 +1,13 @@
 #include "instrument.h"
 
-// factories for building instrument patches. optional to use
+// factories for building instrument patches.
+
+// when a note starts, set pitch, reset phase, trigger envelope
+// when releasing a note, trigger envelope release
+// takes parameter ID to be changed and forwards to ParamMap
 Voice make_oscillator_envelope_voice(std::shared_ptr<OscillatorNode> osc,
-                                      std::shared_ptr<EnvelopeNode> env) {
+                                     std::shared_ptr<EnvelopeNode> env,
+                                     std::shared_ptr<ParamMap> params) {
     return Voice(
         [osc, env](float frequency, float amplitude) {
             osc->osc->frequency = frequency;
@@ -11,38 +16,69 @@ Voice make_oscillator_envelope_voice(std::shared_ptr<OscillatorNode> osc,
         },
         [env] { env->release(); },
         [env] { return env->adsr.is_idle(); },
-        [env](int param_id, float value) {
-            switch (static_cast<EnvelopeParam>(param_id)) {
-                case EnvelopeParam::Attack:  env->adsr.attack_time = value;   break;
-                case EnvelopeParam::Decay:   env->adsr.decay_time = value;    break;
-                case EnvelopeParam::Sustain: env->adsr.sustain_level = value; break;
-                case EnvelopeParam::Release: env->adsr.release_time = value; break;
-            }
-        }
+        [params](int param_id, float value) { params->set(param_id, value); }
     );
 }
 
+// build copies of a voice
 Instrument build_instrument(AudioContext* ctx,
                              std::shared_ptr<AudioNode> output_target,
                              std::string name,
                              int voice_count,
                              std::function<std::unique_ptr<Oscillator>()> make_osc,
-                             ADSR envelope) {
+                             ADSR envelope,
+                             std::vector<NodeFactory> extra_nodes) {
     Instrument instrument;
     instrument.name = std::move(name);
     instrument.voices.reserve(voice_count);
 
+    // make envelope wrapped oscillator
+    // register parameters into ParamMap
     for (int i = 0; i < voice_count; i++) {
         auto osc = std::make_shared<OscillatorNode>(make_osc(), ctx);
         auto env = std::make_shared<EnvelopeNode>(osc, ctx, envelope);
-        output_target->inputs.push_back(env);
-        instrument.voices.push_back(make_oscillator_envelope_voice(osc, env));
+
+        auto params = std::make_shared<ParamMap>();
+        params->add_node(env.get());
+
+        std::shared_ptr<AudioNode> chain_end = env;
+        
+        // add extra nodes to chain. need to make oscillator and envelope 
+        // work like this too but they're special cases at the moment
+        for (auto& make_node : extra_nodes) {
+            auto node = make_node(chain_end, ctx);
+            params->add_node(node.get());
+            chain_end = node;
+        }
+
+        output_target->inputs.push_back(chain_end);
+
+        // only save one name table since they're identical for each voice in the instrument
+        if (i == 0)
+            instrument.param_names = params->name_to_id;
+        
+        // create voice
+        instrument.voices.push_back(make_oscillator_envelope_voice(osc, env, params));
     }
     return instrument;
 }
 
+// add instrument data to context
 void register_instrument(AudioContext* ctx, Instrument instrument) {
     int index = static_cast<int>(ctx->instrument_voice_pools.size());
     ctx->instrument_index_names[instrument.name] = index;
     ctx->instrument_voice_pools.push_back(std::move(instrument.voices));
+    ctx->instrument_param_names.push_back(std::move(instrument.param_names));
+}
+
+// lookup for parameters
+int param_id(AudioContext* ctx, int instrument_index, std::string_view name) {
+    if (instrument_index < 0 || static_cast<size_t>(instrument_index) >= ctx->instrument_param_names.size())
+        throw std::invalid_argument("param_id: unknown instrument index");
+
+    auto& names = ctx->instrument_param_names[instrument_index];
+    auto it = names.find(std::string(name));
+    if (it == names.end())
+        throw std::invalid_argument("param_id: unknown parameter name for this instrument");
+    return it->second;
 }

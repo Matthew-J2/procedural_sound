@@ -95,16 +95,27 @@ void build_patch(AudioContext* ctx)
     mixer->inputs.push_back(square);
     mixer->inputs.push_back(saw_gate);
 
+
+    std::vector<NodeFactory> gated = {
+        [](std::shared_ptr<AudioNode> input, AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+            auto gate = std::make_shared<GateNode>(input, ctx);
+            gate->active = true; // on by default
+            return gate;
+        }
+    };
+
     register_instrument(ctx, build_instrument(
         ctx, mixer, "pad", 32,
         [] { return std::make_unique<TriangleOscillator>(0.0f, 1.0f); },
-        ADSR(0.5f, 0.35f, 0.5f, 0.5f)
+        ADSR(0.5f, 0.35f, 0.5f, 0.5f),
+        gated
     ));
 
     register_instrument(ctx, build_instrument(
         ctx, mixer, "pluck", 16,
         [] { return std::make_unique<SawOscillator>(0.0f, 1.0f); },
-        ADSR(0.002f, 0.35f, 0.0f, 0.35f)
+        ADSR(0.002f, 0.35f, 0.0f, 0.35f),
+        gated
     ));
 
         ctx->output_node = mixer;
@@ -320,7 +331,7 @@ int config_device()
         .type = EventType::ParamChange,
         .trigger_sample = (uint64_t)(9.75 * audio_ctx->sample_rate),
         .instrument_index = 1,
-        .param_id = static_cast<int>(EnvelopeParam::Attack),
+        .param_id = param_id(audio_ctx.get(), 1, "attack"),
         .value = 0.5f
     });
  
@@ -328,7 +339,7 @@ int config_device()
         .type = EventType::ParamChange,
         .trigger_sample = (uint64_t)(9.75 * audio_ctx->sample_rate),
         .instrument_index = 1,
-        .param_id = static_cast<int>(EnvelopeParam::Decay),
+        .param_id = param_id(audio_ctx.get(), 1, "decay"),
         .value = 0.35f
     });
  
@@ -336,7 +347,7 @@ int config_device()
         .type = EventType::ParamChange,
         .trigger_sample = (uint64_t)(9.75 * audio_ctx->sample_rate),
         .instrument_index = 1,
-        .param_id = static_cast<int>(EnvelopeParam::Sustain),
+        .param_id = param_id(audio_ctx.get(), 1, "sustain"),
         .value = 0.5f
     });
  
@@ -344,7 +355,7 @@ int config_device()
         .type = EventType::ParamChange,
         .trigger_sample = (uint64_t)(9.75 * audio_ctx->sample_rate),
         .instrument_index = 1,
-        .param_id = static_cast<int>(EnvelopeParam::Release),
+       .param_id = param_id(audio_ctx.get(), 1, "release"),
         .value = 0.5f
     });
 
