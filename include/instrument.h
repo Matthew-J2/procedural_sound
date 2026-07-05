@@ -2,6 +2,8 @@
 #include <memory>
 #include "graph.h"
 
+enum class EnvelopeParam : int { Attack, Decay, Sustain, Release };
+
 Voice make_oscillator_envelope_voice(std::shared_ptr<OscillatorNode> osc, std::shared_ptr<EnvelopeNode> env);
 
 struct Instrument {

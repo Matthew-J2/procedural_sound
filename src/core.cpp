@@ -35,6 +35,10 @@ void dispatch_due_events(AudioContext* ctx, SPSCRingBuffer<ScheduledEvent>& queu
                     }
                 }
                 break;
+            case EventType::ParamChange:
+                for (auto& voice : pool)
+                    voice.set_param(ev.param_id, ev.value);
+                break;
         }
     }
 }
@@ -308,6 +312,40 @@ int config_device()
         .trigger_sample = (uint64_t)(9.5 * audio_ctx->sample_rate),
         .instrument_index = 1,
         .note_id = 9
+    });
+
+
+    // halfway through the scale: set events to change from pluck to a pad
+    event_queue->push({
+        .type = EventType::ParamChange,
+        .trigger_sample = (uint64_t)(9.75 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .param_id = static_cast<int>(EnvelopeParam::Attack),
+        .value = 0.5f
+    });
+ 
+    event_queue->push({
+        .type = EventType::ParamChange,
+        .trigger_sample = (uint64_t)(9.75 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .param_id = static_cast<int>(EnvelopeParam::Decay),
+        .value = 0.35f
+    });
+ 
+    event_queue->push({
+        .type = EventType::ParamChange,
+        .trigger_sample = (uint64_t)(9.75 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .param_id = static_cast<int>(EnvelopeParam::Sustain),
+        .value = 0.5f
+    });
+ 
+    event_queue->push({
+        .type = EventType::ParamChange,
+        .trigger_sample = (uint64_t)(9.75 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .param_id = static_cast<int>(EnvelopeParam::Release),
+        .value = 0.5f
     });
 
     event_queue->push({

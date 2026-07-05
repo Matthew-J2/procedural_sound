@@ -6,11 +6,14 @@ struct Voice {
     std::function<void(float frequency, float amplitude)> note_on;
     std::function<void()> note_off;
     std::function<bool()> is_idle;
+    std::function<void(int param_id, float value)> set_param;
 
     Voice(std::function<void(float, float)> on,
           std::function<void()> off,
-          std::function<bool()> idle)
-        : note_on(std::move(on)), note_off(std::move(off)), is_idle(std::move(idle)) {}
+          std::function<bool()> idle,
+          std::function<void(int, float)> set_p = [](int, float) {})
+        : note_on(std::move(on)), note_off(std::move(off)), is_idle(std::move(idle)),
+          set_param(std::move(set_p)) {}
 
     void trigger(int id, float frequency, float amplitude) {
         note_id = id;

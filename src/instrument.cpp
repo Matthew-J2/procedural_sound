@@ -10,7 +10,15 @@ Voice make_oscillator_envelope_voice(std::shared_ptr<OscillatorNode> osc,
             env->trigger(amplitude);
         },
         [env] { env->release(); },
-        [env] { return env->adsr.is_idle(); }
+        [env] { return env->adsr.is_idle(); },
+        [env](int param_id, float value) {
+            switch (static_cast<EnvelopeParam>(param_id)) {
+                case EnvelopeParam::Attack:  env->adsr.attack_time = value;   break;
+                case EnvelopeParam::Decay:   env->adsr.decay_time = value;    break;
+                case EnvelopeParam::Sustain: env->adsr.sustain_level = value; break;
+                case EnvelopeParam::Release: env->adsr.release_time = value; break;
+            }
+        }
     );
 }
 

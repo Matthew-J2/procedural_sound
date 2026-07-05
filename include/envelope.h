@@ -39,6 +39,7 @@ struct ADSR {
                 break;
             
             case Stage::Decay:
+                segment_target = peak_level * sustain_level;
                 if (advance_segment (sample_rate, decay_time)) {
                     stage = Stage::Sustain;
                     current_level = peak_level * sustain_level;
