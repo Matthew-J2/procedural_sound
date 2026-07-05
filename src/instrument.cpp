@@ -39,7 +39,7 @@ Instrument build_instrument(AudioContext* ctx,
         auto env = std::make_shared<EnvelopeNode>(osc, ctx, envelope);
 
         auto params = std::make_shared<ParamMap>();
-        params->add_node(env.get());
+        params->add_node(env);
 
         std::shared_ptr<AudioNode> chain_end = env;
         
@@ -47,7 +47,7 @@ Instrument build_instrument(AudioContext* ctx,
         // work like this too but they're special cases at the moment
         for (auto& make_node : extra_nodes) {
             auto node = make_node(chain_end, ctx);
-            params->add_node(node.get());
+            params->add_node(node);
             chain_end = node;
         }
 
