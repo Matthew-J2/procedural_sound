@@ -194,6 +194,36 @@ struct EnvelopeNode : AudioNode {
             default: return {};
         }
     }
+
 };
 
+// node to sum only currently active voices and prune inactive ones once their envelope is idle.
+struct InstrumentMixNode: AudioNode {
+    int instrument_index;
+    
+    InstrumentMixNode(AudioContext* ctx, int instrument_index)
+    : instrument_index(instrument_index) {
+        this->ctx = ctx;
+    }       
+
+    float process() override {
+        auto& indices = ctx->active_voice_indices[instrument_index];
+        auto& nodes = ctx->instrument_voice_nodes[instrument_index];
+        auto& pool = ctx->instrument_voice_pools[instrument_index];
+
+        float sum = 0.0f;
+        for (size_t k = 0; k < indices.size(); ) {
+            int i = indices[k];
+            sum += nodes[i]->pull(); // advances the envelope for each active node
+
+            if (pool[i].is_idle()) {
+                indices[k] = indices.back();
+                indices.pop_back(); // swap-and-pop, order doesn't matter
+            } else {
+                k++;
+            }
+        }
+        return sum;
+    }
+};
 

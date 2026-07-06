@@ -62,6 +62,12 @@ struct AudioFrame
     float samples[Channels];
 };
 
+struct CallbackLog {
+    uint64_t sample_index;
+    double callback_us;
+    double budget_us;
+};
+
 struct AudioNode;
 template <typename T> struct SPSCRingBuffer;
 
@@ -74,9 +80,12 @@ struct AudioContext {
 
     SPSCRingBuffer<ScheduledEvent>* event_queue = nullptr;
     std::vector<std::vector<Voice>> instrument_voice_pools;
+    std::vector<std::vector<std::shared_ptr<AudioNode>>> instrument_voice_nodes;
+    std::vector<std::vector<int>> active_voice_indices; // indices of currently-sounding voices, per instrument
     std::unordered_map<std::string, int> instrument_index_names;
     std::vector<std::unordered_map<std::string, int>> instrument_param_names;
     std::unique_ptr<SPSCRingBuffer<StereoFrame>> audio_log_buffer;
+    std::unique_ptr<SPSCRingBuffer<CallbackLog>> timing_log;
 };
 
 template <typename T>

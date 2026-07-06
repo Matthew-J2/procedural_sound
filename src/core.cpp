@@ -20,9 +20,10 @@ void dispatch_due_events(AudioContext* ctx, SPSCRingBuffer<ScheduledEvent>& queu
 
         switch (ev.type) {
             case EventType::NoteOn:
-                for (auto& voice : pool) {
-                    if (voice.is_idle()) {
-                        voice.trigger(ev.note_id, ev.frequency, ev.amplitude);
+                for (size_t i = 0; i < pool.size(); i++) {
+                    if (pool[i].is_idle()) {
+                        pool[i].trigger(ev.note_id, ev.frequency, ev.amplitude);
+                        ctx->active_voice_indices[ev.instrument_index].push_back(static_cast<int>(i));
                         break;
                     }
                 }
@@ -45,6 +46,7 @@ void dispatch_due_events(AudioContext* ctx, SPSCRingBuffer<ScheduledEvent>& queu
 
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount)
 {
+    auto t0 = std::chrono::steady_clock::now();
     // get audio context (oscillators right now)
     AudioContext* audio_ctx = (AudioContext*)pDevice->pUserData;
 
@@ -67,6 +69,13 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
         }
         audio_ctx->audio_log_buffer->push(frame);
     }
+    auto t1 = std::chrono::steady_clock::now();
+
+    double callback_us = std::chrono::duration<double, std::micro>(t1 - t0).count();
+    double budget_us = (double)frameCount / audio_ctx->sample_rate * 1'000'000.0;
+
+    if (callback_us > budget_us * 0.8) // warn before you actually miss it
+        audio_ctx->timing_log->push({audio_ctx->current_sample, callback_us, budget_us});
 }
 
 void build_patch(AudioContext* ctx)
@@ -104,15 +113,14 @@ void build_patch(AudioContext* ctx)
         }
     };
 
-    //FIXME: noticing some pops when voice pool is increased, despite the voices being inactive. no samples are actually dropped in the wav so it's not anything in the callback. investigate and fix
     register_instrument(ctx, build_instrument(
-        ctx, mixer, "pad", 16,
+        ctx, mixer, "pad", 32,
         [](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
             return std::make_shared<OscillatorNode>(std::make_unique<TriangleOscillator>(0.0f, 1.0f), ctx);
         },
         ADSR(0.5f, 0.35f, 0.5f, 0.5f),
         gated
-    ));
+    ), mixer);
 
     register_instrument(ctx, build_instrument(
         ctx, mixer, "pluck", 16,
@@ -121,9 +129,7 @@ void build_patch(AudioContext* ctx)
         },
         ADSR(0.002f, 0.35f, 0.0f, 0.35f),
         gated
-    ));        
-    ctx->output_node = mixer;
-    
+    ), mixer);        
 
     register_instrument(ctx, build_instrument(
         ctx, mixer, "bell", 8,
@@ -136,7 +142,8 @@ void build_patch(AudioContext* ctx)
         },
         ADSR(0.005f, 0.3f, 0.3f, 0.6f),
         gated
-    ));
+    ), mixer);
+    ctx->output_node = mixer;
 }
 
 std::unique_ptr<SPSCRingBuffer<ScheduledEvent>> init_event_queue(AudioContext* ctx, size_t capacity = 64)
@@ -195,6 +202,8 @@ int config_device()
     size_t sampleTime = 20;
 
     audio_ctx->audio_log_buffer = std::make_unique<SPSCRingBuffer<StereoFrame>>(device->sampleRate * sampleTime * 2); //FIXME: multiplying gives slack but doesn't actually solve the risk of overflow from pipewire / your api of choice acting up. this is bad and wastes tons of memory but I'm leaving it like this for now / a while because I want to do other stuff
+
+    audio_ctx->timing_log = std::make_unique<SPSCRingBuffer<CallbackLog>>(1024);
 
     // push events on queue
     event_queue->push({
@@ -542,6 +551,12 @@ int config_device()
             1,
             nullptr
         );
+    }
+
+    CallbackLog t;
+    while (audio_ctx->timing_log->pop(t)) {
+        std::cerr << "callback overrun at sample " << t.sample_index
+                  << ": " << t.callback_us << "us / " << t.budget_us << "us budget\n";
     }
 
     std::cout << "dropped samples: " << audio_ctx->audio_log_buffer->get_dropped() << "\n";

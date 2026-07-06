@@ -53,6 +53,7 @@ Voice make_voice(std::shared_ptr<AudioNode> head, std::shared_ptr<EnvelopeNode> 
 struct Instrument {
     std::string name;
     std::vector<Voice> voices;
+    std::vector<std::shared_ptr<AudioNode>> voice_nodes; // end node for each voice
     std::unordered_map<std::string, int> param_names;
 };
 
@@ -64,6 +65,6 @@ Instrument build_instrument(AudioContext* ctx,
                              ADSR envelope,
                              std::vector<NodeFactory> extra_nodes = {});
 
-void register_instrument(AudioContext* ctx, Instrument instrument);
+void register_instrument(AudioContext* ctx, Instrument instrument, std::shared_ptr<AudioNode> output_target);
 
 int param_id(AudioContext* ctx, int instrument_index, std::string_view name);
