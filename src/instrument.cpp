@@ -5,13 +5,12 @@
 // when a note starts, set pitch, reset phase, trigger envelope
 // when releasing a note, trigger envelope release
 // takes parameter ID to be changed and forwards to ParamMap
-Voice make_oscillator_envelope_voice(std::shared_ptr<OscillatorNode> osc,
+Voice make_voice(std::shared_ptr<AudioNode> head,
                                      std::shared_ptr<EnvelopeNode> env,
                                      std::shared_ptr<ParamMap> params) {
     return Voice(
-        [osc, env](float frequency, float amplitude) {
-            osc->osc->frequency = frequency;
-            osc->osc->phase = 0.0f;
+        [head, env](float frequency, float amplitude) {
+            head->retrigger(frequency);
             env->trigger(amplitude);
         },
         [env] { env->release(); },
@@ -25,18 +24,18 @@ Instrument build_instrument(AudioContext* ctx,
                              std::shared_ptr<AudioNode> output_target,
                              std::string name,
                              int voice_count,
-                             std::function<std::unique_ptr<Oscillator>()> make_osc,
-                             ADSR envelope,
-                             std::vector<NodeFactory> extra_nodes) {
+                            std::function<std::shared_ptr<AudioNode>(AudioContext*)> make_head,
+                            ADSR envelope,
+                            std::vector<NodeFactory> extra_nodes) {
     Instrument instrument;
     instrument.name = std::move(name);
     instrument.voices.reserve(voice_count);
 
-    // make envelope wrapped oscillator
+    // make envelope wrapped head
     // register parameters into ParamMap
     for (int i = 0; i < voice_count; i++) {
-        auto osc = std::make_shared<OscillatorNode>(make_osc(), ctx);
-        auto env = std::make_shared<EnvelopeNode>(osc, ctx, envelope);
+        auto head = make_head(ctx);
+        auto env = std::make_shared<EnvelopeNode>(head, ctx, envelope);
 
         auto params = std::make_shared<ParamMap>();
         params->add_node(env);
@@ -58,7 +57,7 @@ Instrument build_instrument(AudioContext* ctx,
             instrument.param_names = params->name_to_id;
         
         // create voice
-        instrument.voices.push_back(make_oscillator_envelope_voice(osc, env, params));
+        instrument.voices.push_back(make_voice(head, env, params));
     }
     return instrument;
 }

@@ -91,55 +91,53 @@ void build_patch(AudioContext* ctx)
     auto saw_gate = std::make_shared<GateNode>(saw, ctx);
     saw_gate->active = true;
 
-    float carrier_freq = note_frequency("C4");
-    float mod_freq = carrier_freq * 1.41f;   // modulator/carrier ratio
-    float mod_depth = carrier_freq * 3.0f;               // how far the frequency swings, in Hz
-
-    auto fm_base = std::make_shared<ConstantNode>(carrier_freq, ctx);
-    auto fm_modulator = std::make_shared<OscillatorNode>(
-        std::make_unique<SineOscillator>(mod_freq, mod_depth), ctx
-    );
-
-    auto fm_sum = std::make_shared<MixerNode>();
-    fm_sum->ctx = ctx;
-    fm_sum->inputs.push_back(fm_base);
-    fm_sum->inputs.push_back(fm_modulator);
-
-    auto fm_carrier = std::make_shared<OscillatorNode>(
-        std::make_unique<SineOscillator>(carrier_freq, 0.15f), ctx
-    );
-    fm_carrier->inputs.push_back(fm_sum); // this is what makes it FM, not just a sine
-
-    // mixer->inputs.push_back(sine);
-    // mixer->inputs.push_back(square);
-    // mixer->inputs.push_back(saw_gate);
-    mixer->inputs.push_back(fm_carrier);
+    mixer->inputs.push_back(sine);
+    mixer->inputs.push_back(square);
+    mixer->inputs.push_back(saw_gate);
 
 
-    // std::vector<NodeFactory> gated = {
-    //     [](std::shared_ptr<AudioNode> input, AudioContext* ctx) -> std::shared_ptr<AudioNode> {
-    //         auto gate = std::make_shared<GateNode>(input, ctx);
-    //         gate->active = true; // on by default
-    //         return gate;
-    //     }
-    // };
-    //
-    // register_instrument(ctx, build_instrument(
-    //     ctx, mixer, "pad", 32,
-    //     [] { return std::make_unique<TriangleOscillator>(0.0f, 1.0f); },
-    //     ADSR(0.5f, 0.35f, 0.5f, 0.5f),
-    //     gated
-    // ));
-    //
-    // register_instrument(ctx, build_instrument(
-    //     ctx, mixer, "pluck", 16,
-    //     [] { return std::make_unique<SawOscillator>(0.0f, 1.0f); },
-    //     ADSR(0.002f, 0.35f, 0.0f, 0.35f),
-    //     gated
-    // ));
+    std::vector<NodeFactory> gated = {
+        [](std::shared_ptr<AudioNode> input, AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+            auto gate = std::make_shared<GateNode>(input, ctx);
+            gate->active = true; // on by default
+            return gate;
+        }
+    };
 
-        ctx->output_node = mixer;
-    }
+    //FIXME: noticing some pops when voice pool is increased, despite the voices being inactive. no samples are actually dropped in the wav so it's not anything in the callback. investigate and fix
+    register_instrument(ctx, build_instrument(
+        ctx, mixer, "pad", 16,
+        [](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+            return std::make_shared<OscillatorNode>(std::make_unique<TriangleOscillator>(0.0f, 1.0f), ctx);
+        },
+        ADSR(0.5f, 0.35f, 0.5f, 0.5f),
+        gated
+    ));
+
+    register_instrument(ctx, build_instrument(
+        ctx, mixer, "pluck", 16,
+        [](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+            return std::make_shared<OscillatorNode>(std::make_unique<SawOscillator>(0.0f, 1.0f), ctx);
+        },
+        ADSR(0.002f, 0.35f, 0.0f, 0.35f),
+        gated
+    ));        
+    ctx->output_node = mixer;
+    
+
+    register_instrument(ctx, build_instrument(
+        ctx, mixer, "bell", 8,
+        [](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+            return std::make_shared<FMNode>(
+                std::make_unique<SineOscillator>(0.0f, 0.2f), ctx,
+                1.41f,   // ratio
+                300.0f   // depth in Hz
+            );
+        },
+        ADSR(0.005f, 0.3f, 0.3f, 0.6f),
+        gated
+    ));
+}
 
 std::unique_ptr<SPSCRingBuffer<ScheduledEvent>> init_event_queue(AudioContext* ctx, size_t capacity = 64)
 {
@@ -199,282 +197,314 @@ int config_device()
     audio_ctx->audio_log_buffer = std::make_unique<SPSCRingBuffer<StereoFrame>>(device->sampleRate * sampleTime * 2); //FIXME: multiplying gives slack but doesn't actually solve the risk of overflow from pipewire / your api of choice acting up. this is bad and wastes tons of memory but I'm leaving it like this for now / a while because I want to do other stuff
 
     // push events on queue
-    // event_queue->push({
-    //     .type = EventType::NoteOn,
-    //     .trigger_sample = 0,
-    //     .instrument_index = 0,
-    //     .note_id = 1,
-    //     .frequency = note_frequency("C4"), // C4
-    //     .amplitude = 0.3f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOn,
-    //     .trigger_sample = (uint64_t)(0.5 * audio_ctx->sample_rate),
-    //     .instrument_index = 0,
-    //     .note_id = 2,
-    //     .frequency = note_frequency("E4"), // E4
-    //     .amplitude = 0.3f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOn,
-    //     .trigger_sample = (uint64_t)(1.0 * audio_ctx->sample_rate),
-    //     .instrument_index = 0,
-    //     .note_id = 3,
-    //     .frequency = note_frequency("G4"), // G4
-    //     .amplitude = 0.3f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOff,
-    //     .trigger_sample = (uint64_t)(2.0 * audio_ctx->sample_rate),
-    //     .instrument_index = 0,
-    //     .note_id = 1 // C4 release
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOff,
-    //     .trigger_sample = (uint64_t)(2.5 * audio_ctx->sample_rate),
-    //     .instrument_index = 0,
-    //     .note_id = 2 // E4 release
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOff,
-    //     .trigger_sample = (uint64_t)(3.0 * audio_ctx->sample_rate),
-    //     .instrument_index = 0,
-    //     .note_id = 3 // G4 release
-    // });
-    //
-    // // let's do half a 24-TET scale for funsies
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOn,
-    //     .trigger_sample = (uint64_t)(4.0 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 4,
-    //     .frequency = midi_to_frequency(60),
-    //     .amplitude = 0.3f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOff,
-    //     .trigger_sample = (uint64_t)(4.5 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 4
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOn,
-    //     .trigger_sample = (uint64_t)(5.0 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 5,
-    //     .frequency = midi_to_frequency(60.5),
-    //     .amplitude = 0.3f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOff,
-    //     .trigger_sample = (uint64_t)(5.5 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 5
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOn,
-    //     .trigger_sample = (uint64_t)(6.0 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 6,
-    //     .frequency = midi_to_frequency(61),
-    //     .amplitude = 0.3f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOff,
-    //     .trigger_sample = (uint64_t)(6.5 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 6
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOn,
-    //     .trigger_sample = (uint64_t)(7.0 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 7,
-    //     .frequency = midi_to_frequency(61.5),
-    //     .amplitude = 0.3f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOff,
-    //     .trigger_sample = (uint64_t)(7.5 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 7
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOn,
-    //     .trigger_sample = (uint64_t)(8.0 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 8,
-    //     .frequency = midi_to_frequency(62),
-    //     .amplitude = 0.3f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOff,
-    //     .trigger_sample = (uint64_t)(8.5 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 8
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOn,
-    //     .trigger_sample = (uint64_t)(9.0 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 9,
-    //     .frequency = midi_to_frequency(62.5),
-    //     .amplitude = 0.3f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOff,
-    //     .trigger_sample = (uint64_t)(9.5 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 9
-    // });
-    //
-    //
-    // // halfway through the scale: set events to change from pluck to a pad
-    // event_queue->push({
-    //     .type = EventType::ParamChange,
-    //     .trigger_sample = (uint64_t)(9.75 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .param_id = param_id(audio_ctx.get(), 1, "attack"),
-    //     .value = 0.5f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::ParamChange,
-    //     .trigger_sample = (uint64_t)(9.75 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .param_id = param_id(audio_ctx.get(), 1, "decay"),
-    //     .value = 0.35f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::ParamChange,
-    //     .trigger_sample = (uint64_t)(9.75 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .param_id = param_id(audio_ctx.get(), 1, "sustain"),
-    //     .value = 0.5f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::ParamChange,
-    //     .trigger_sample = (uint64_t)(9.75 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //    .param_id = param_id(audio_ctx.get(), 1, "release"),
-    //     .value = 0.5f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOn,
-    //     .trigger_sample = (uint64_t)(10.0 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 10,
-    //     .frequency = midi_to_frequency(63),
-    //     .amplitude = 0.3f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOff,
-    //     .trigger_sample = (uint64_t)(10.5 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 10
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOn,
-    //     .trigger_sample = (uint64_t)(11.0 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 11,
-    //     .frequency = midi_to_frequency(63.5),
-    //     .amplitude = 0.3f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOff,
-    //     .trigger_sample = (uint64_t)(11.5 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 11
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOn,
-    //     .trigger_sample = (uint64_t)(12.0 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 12,
-    //     .frequency = midi_to_frequency(64),
-    //     .amplitude = 0.3f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOff,
-    //     .trigger_sample = (uint64_t)(12.5 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 12
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOn,
-    //     .trigger_sample = (uint64_t)(13.0 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 13,
-    //     .frequency = midi_to_frequency(64.5),
-    //     .amplitude = 0.3f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOff,
-    //     .trigger_sample = (uint64_t)(13.5 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 13
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOn,
-    //     .trigger_sample = (uint64_t)(14.0 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 14,
-    //     .frequency = midi_to_frequency(65),
-    //     .amplitude = 0.3f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOff,
-    //     .trigger_sample = (uint64_t)(14.5 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 14
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOn,
-    //     .trigger_sample = (uint64_t)(15.0 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 15,
-    //     .frequency = midi_to_frequency(65.5),
-    //     .amplitude = 0.3f
-    // });
-    //
-    // event_queue->push({
-    //     .type = EventType::NoteOff,
-    //     .trigger_sample = (uint64_t)(15.5 * audio_ctx->sample_rate),
-    //     .instrument_index = 1,
-    //     .note_id = 15
-    // });
-    //
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = 0,
+        .instrument_index = 0,
+        .note_id = 1,
+        .frequency = note_frequency("C4"), // C4
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(0.5 * audio_ctx->sample_rate),
+        .instrument_index = 0,
+        .note_id = 2,
+        .frequency = note_frequency("E4"), // E4
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(1.0 * audio_ctx->sample_rate),
+        .instrument_index = 0,
+        .note_id = 3,
+        .frequency = note_frequency("G4"), // G4
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(2.0 * audio_ctx->sample_rate),
+        .instrument_index = 0,
+        .note_id = 1 // C4 release
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(2.5 * audio_ctx->sample_rate),
+        .instrument_index = 0,
+        .note_id = 2 // E4 release
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(3.0 * audio_ctx->sample_rate),
+        .instrument_index = 0,
+        .note_id = 3 // G4 release
+    });
+
+    // let's do half a 24-TET scale for funsies
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(4.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 4,
+        .frequency = midi_to_frequency(60),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(4.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 4
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(5.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 5,
+        .frequency = midi_to_frequency(60.5),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(5.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 5
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(6.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 6,
+        .frequency = midi_to_frequency(61),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(6.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 6
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(7.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 7,
+        .frequency = midi_to_frequency(61.5),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(7.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 7
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(8.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 8,
+        .frequency = midi_to_frequency(62),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(8.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 8
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(9.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 9,
+        .frequency = midi_to_frequency(62.5),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(9.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 9
+    });
+
+
+    // halfway through the scale: set events to change from pluck to a pad
+    event_queue->push({
+        .type = EventType::ParamChange,
+        .trigger_sample = (uint64_t)(9.75 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .param_id = param_id(audio_ctx.get(), 1, "attack"),
+        .value = 0.5f
+    });
+
+    event_queue->push({
+        .type = EventType::ParamChange,
+        .trigger_sample = (uint64_t)(9.75 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .param_id = param_id(audio_ctx.get(), 1, "decay"),
+        .value = 0.35f
+    });
+
+    event_queue->push({
+        .type = EventType::ParamChange,
+        .trigger_sample = (uint64_t)(9.75 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .param_id = param_id(audio_ctx.get(), 1, "sustain"),
+        .value = 0.5f
+    });
+
+    event_queue->push({
+        .type = EventType::ParamChange,
+        .trigger_sample = (uint64_t)(9.75 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+       .param_id = param_id(audio_ctx.get(), 1, "release"),
+        .value = 0.5f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(10.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 10,
+        .frequency = midi_to_frequency(63),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(10.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 10
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(11.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 11,
+        .frequency = midi_to_frequency(63.5),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(11.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 11
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(12.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 12,
+        .frequency = midi_to_frequency(64),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(12.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 12
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(13.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 13,
+        .frequency = midi_to_frequency(64.5),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(13.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 13
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(14.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 14,
+        .frequency = midi_to_frequency(65),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(14.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 14
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(15.0 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 15,
+        .frequency = midi_to_frequency(65.5),
+        .amplitude = 0.3f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(15.5 * audio_ctx->sample_rate),
+        .instrument_index = 1,
+        .note_id = 15
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(16.0 * audio_ctx->sample_rate),
+        .instrument_index = 2,
+        .note_id = 16,
+        .frequency = midi_to_frequency(66.0),
+        .amplitude = 0.6f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(16.5 * audio_ctx->sample_rate),
+        .instrument_index = 2,
+        .note_id = 16
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOn,
+        .trigger_sample = (uint64_t)(17.0 * audio_ctx->sample_rate),
+        .instrument_index = 2,
+        .note_id = 17,
+        .frequency = midi_to_frequency(66.5),
+        .amplitude = 0.6f
+    });
+
+    event_queue->push({
+        .type = EventType::NoteOff,
+        .trigger_sample = (uint64_t)(17.5 * audio_ctx->sample_rate),
+        .instrument_index = 2,
+        .note_id = 17
+    });
+
         StereoFrame frame;
         // start audio device - callback now active
         if (ma_device_start(device.get()) != MA_SUCCESS) {

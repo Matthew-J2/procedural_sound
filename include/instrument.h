@@ -47,7 +47,7 @@ struct ParamMap {
     }
 };
 
-Voice make_oscillator_envelope_voice(std::shared_ptr<OscillatorNode> osc, std::shared_ptr<EnvelopeNode> env, std::shared_ptr<ParamMap> params);
+Voice make_voice(std::shared_ptr<AudioNode> head, std::shared_ptr<EnvelopeNode> env, std::shared_ptr<ParamMap> params);
 
 // Named collection of voices and a parameter name table.
 struct Instrument {
@@ -60,7 +60,7 @@ Instrument build_instrument(AudioContext* ctx,
                              std::shared_ptr<AudioNode> output_target,
                              std::string name,
                              int voice_count,
-                             std::function<std::unique_ptr<Oscillator>()> make_osc,
+                             std::function<std::shared_ptr<AudioNode>(AudioContext*)> make_head,
                              ADSR envelope,
                              std::vector<NodeFactory> extra_nodes = {});
 
