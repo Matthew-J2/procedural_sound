@@ -5,28 +5,41 @@
 // when a note starts, set pitch, reset phase, trigger envelope
 // when releasing a note, trigger envelope release
 // takes parameter ID to be changed and forwards to ParamMap
-Voice make_voice(std::shared_ptr<AudioNode> head,
-                                     std::shared_ptr<EnvelopeNode> env,
-                                     std::shared_ptr<ParamMap> params) {
+Voice make_voice(std::vector<std::shared_ptr<AudioNode>> chain,
+                  std::shared_ptr<ParamMap> params) {
     return Voice(
-        [head, env](float frequency, float amplitude) {
-            head->retrigger(frequency);
-            env->trigger(amplitude);
+        [chain](float frequency, float amplitude) {
+            for (auto& node : chain) {
+                node->retrigger(frequency);
+                node->trigger(amplitude);   // no-op for anything that doesn't override it
+            }
         },
-        [env] { env->release(); },
-        [env] { return env->adsr.is_idle(); },
+        [chain] {
+            for (auto& node : chain) node->release();
+        },
+        [chain] {
+            // idle only when every node that has a concept of "done" agrees
+            for (auto& node : chain) {
+                if (!node->is_idle()) return false;
+            }
+            return true;
+        },
         [params](int param_id, float value) { params->set(param_id, value); }
     );
 }
 
+NodeFactory make_envelope_factory(ADSR envelope) {
+    return [envelope](std::shared_ptr<AudioNode> input, AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+        return std::make_shared<EnvelopeNode>(input, ctx, envelope);
+    };
+}
+
 // build copies of a voice
 Instrument build_instrument(AudioContext* ctx,
-                            std::shared_ptr<AudioNode> output_target,
                             std::string name,
                             int voice_count,
                             std::function<std::shared_ptr<AudioNode>(AudioContext*)> make_head,
-                            ADSR envelope,
-                            std::vector<NodeFactory> extra_nodes) {
+                            std::vector<NodeFactory> chain) {
     Instrument instrument;
     instrument.name = std::move(name);
     instrument.voices.reserve(voice_count);
@@ -35,19 +48,19 @@ Instrument build_instrument(AudioContext* ctx,
     // make envelope wrapped head
     // register parameters into ParamMap
     for (int i = 0; i < voice_count; i++) {
-        auto head = make_head(ctx);
-        auto env = std::make_shared<EnvelopeNode>(head, ctx, envelope);
-
         auto params = std::make_shared<ParamMap>();
-        params->add_node(env);
+        auto head = make_head(ctx);
+        params->add_node(head);
 
-        std::shared_ptr<AudioNode> chain_end = env;
+        std::vector<std::shared_ptr<AudioNode>> chain_nodes = {head};
+        std::shared_ptr<AudioNode> chain_end = head;
         
         // add extra nodes to chain. need to make oscillator and envelope 
         // work like this too but they're special cases at the moment
-        for (auto& make_node : extra_nodes) {
+        for (auto& make_node : chain) {
             auto node = make_node(chain_end, ctx);
             params->add_node(node);
+            chain_nodes.push_back(node);
             chain_end = node;
         }
 
@@ -58,7 +71,7 @@ Instrument build_instrument(AudioContext* ctx,
             instrument.param_names = params->name_to_id;
         
         // create voice
-        instrument.voices.push_back(make_voice(head, env, params));
+        instrument.voices.push_back(make_voice(std::move(chain_nodes), params));
     }
     return instrument;
 }

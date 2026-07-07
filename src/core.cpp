@@ -104,7 +104,7 @@ void build_patch(AudioContext* ctx)
     mixer->inputs.push_back(square);
     mixer->inputs.push_back(saw_gate);
 
-
+    // gate recipe
     std::vector<NodeFactory> gated = {
         [](std::shared_ptr<AudioNode> input, AudioContext* ctx) -> std::shared_ptr<AudioNode> {
             auto gate = std::make_shared<GateNode>(input, ctx);
@@ -113,26 +113,31 @@ void build_patch(AudioContext* ctx)
         }
     };
 
+    // take envelope recipe and glue it to gated
+    auto gate_after_test = [&](NodeFactory envelope_factory) {
+        std::vector<NodeFactory> chain = { envelope_factory };
+        chain.insert(chain.end(), gated.begin(), gated.end());
+        return chain;
+    };
+
     register_instrument(ctx, build_instrument(
-        ctx, mixer, "pad", 32,
+        ctx, "pad", 32,
         [](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
             return std::make_shared<OscillatorNode>(std::make_unique<TriangleOscillator>(0.0f, 1.0f), ctx);
         },
-        ADSR(0.5f, 0.35f, 0.5f, 0.5f),
-        gated
+        gate_after_test(make_envelope_factory(ADSR(0.5f, 0.35f, 0.5f, 0.5f)))
     ), mixer);
 
     register_instrument(ctx, build_instrument(
-        ctx, mixer, "pluck", 16,
+        ctx, "pluck", 16,
         [](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
             return std::make_shared<OscillatorNode>(std::make_unique<SawOscillator>(0.0f, 1.0f), ctx);
         },
-        ADSR(0.002f, 0.35f, 0.0f, 0.35f),
-        gated
-    ), mixer);        
+        gate_after_test(make_envelope_factory(ADSR(0.002f, 0.35f, 0.0f, 0.35f)))
+    ), mixer);             
 
     register_instrument(ctx, build_instrument(
-        ctx, mixer, "bell", 8,
+        ctx, "bell", 8,
         [](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
             return std::make_shared<FMNode>(
                 std::make_unique<SineOscillator>(0.0f, 0.2f), ctx,
@@ -140,8 +145,7 @@ void build_patch(AudioContext* ctx)
                 300.0f   // depth in Hz
             );
         },
-        ADSR(0.005f, 0.3f, 0.3f, 0.6f),
-        gated
+    gate_after_test(make_envelope_factory(ADSR(0.005f, 0.3f, 0.3f, 0.6f)))
     ), mixer);
     ctx->output_node = mixer;
 }

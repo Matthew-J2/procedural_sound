@@ -20,6 +20,15 @@ struct AudioNode {
     // on new note
     virtual void retrigger(float /* frequency */) {}
 
+    // on e.g. adsr envelope start, release, and idle. these 3 are needed so idle voices aren't 
+    // calculated by the graph and so envelope isn't special cased down the line in instruments.
+    // if you don't implement these 3 in your instrument there will be a click when the note 
+    // turns on/off.
+
+    virtual void trigger(float /*amplitude*/) { active_ = true; }
+    virtual void release() { active_ = false; }
+    virtual bool is_idle() const { return !active_; }
+
     float pull() {
         if (ctx->current_sample == last_ticked_sample)
             return cached_output; // if there's a feedback loop calculate it next sample
@@ -31,7 +40,7 @@ struct AudioNode {
     private:
         uint64_t last_ticked_sample = UINT64_MAX;
         float cached_output = 0.0f;
-
+        bool active_ = false;
 
 };
 
@@ -162,12 +171,16 @@ struct EnvelopeNode : AudioNode {
         this->ctx = ctx;
     }
 
-    void trigger(float peak) {
+    void trigger(float peak) override {
         adsr.trigger(peak);
     }
 
-    void release() {
+    void release() override {
         adsr.release();
+    }
+
+    bool is_idle() const override {
+        return adsr.is_idle();
     }
 
     float process() override {
