@@ -11,6 +11,6 @@ fi
 cmake --preset "$MODE"
 cmake --build --preset "$MODE"
 
-ln -sf build/debug/compile_commands.json compile_commands.json
+ln -sf build/$MODE/compile_commands.json compile_commands.json
 
 ctest --test-dir "build/$MODE"
