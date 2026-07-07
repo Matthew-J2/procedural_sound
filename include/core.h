@@ -10,6 +10,13 @@
 #include <memory>
 #include <unordered_map>
 
+#ifdef __cpp_lib_hardware_interference_size
+constexpr size_t CACHE_LINE_SIZE =
+    std::hardware_destructive_interference_size;
+#else
+constexpr size_t CACHE_LINE_SIZE = 64;
+#endif
+
 struct RAIIDevice {
     RAIIDevice(ma_device_config& cfg) {
         if (ma_device_init(NULL, &cfg, &device) != MA_SUCCESS)
@@ -96,8 +103,8 @@ struct SPSCRingBuffer{
         size_t size; // capacity is size - 1 (one slot is always unused)
         size_t mask;
         // avoid false sharing - force onto different cache lines
-        alignas(std::hardware_destructive_interference_size) std::atomic<size_t> write {0};
-        alignas(std::hardware_destructive_interference_size) std::atomic<size_t> read {0};
+        alignas(CACHE_LINE_SIZE) std::atomic<size_t> write {0};
+        alignas(CACHE_LINE_SIZE) std::atomic<size_t> read {0};
 
         std::atomic<size_t> dropped {0};
 
