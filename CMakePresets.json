@@ -1,41 +1,98 @@
+
+
 {
   "version": 8,
-
   "configurePresets": [
     {
-      "name": "debug",
+      "name": "base",
+      "hidden": true,
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/debug",
-
       "cacheVariables": {
-        "CMAKE_CXX_COMPILER": "clang++",
-        "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     },
-
+    {
+      "name": "debug-base",
+      "hidden": true,
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build/debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "release-base",
+      "hidden": true,
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build/release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release"
+      }
+    },
+    {
+      "name": "clang",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "gcc",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": [
+        "debug-base",
+        "clang"
+      ]
+    },
     {
       "name": "release",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/release",
-
-      "cacheVariables": {
-        "CMAKE_CXX_COMPILER": "clang++",
-        "CMAKE_BUILD_TYPE": "Release",
-        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
-      }
+      "inherits": [
+        "release-base",
+        "clang"
+      ]
+    },
+    {
+      "name": "debug-gcc",
+      "binaryDir": "${sourceDir}/build/debug-gcc",
+      "inherits": [
+        "debug-base",
+        "gcc"
+      ]
+    },
+    {
+      "name": "release-gcc",
+      "binaryDir": "${sourceDir}/build/release-gcc",
+      "inherits": [
+        "release-base",
+        "gcc"
+      ]
     }
   ],
-
   "buildPresets": [
     {
       "name": "debug",
       "configurePreset": "debug"
     },
-
     {
       "name": "release",
       "configurePreset": "release"
+    },
+    {
+      "name": "debug-gcc",
+      "configurePreset": "debug-gcc"
+    },
+    {
+      "name": "release-gcc",
+      "configurePreset": "release-gcc"
     }
   ]
 }
+
