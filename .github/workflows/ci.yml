@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            preset: debug
+
+          - os: ubuntu-latest
+            preset: release
+
+          - os: ubuntu-latest
+            preset: debug-gcc
+
+          - os: ubuntu-latest
+            preset: release-gcc
+
+          - os: windows-latest
+            preset: debug-msvc
+
+          - os: windows-latest
+            preset: release-msvc
+
+          - os: macos-latest
+            preset: debug
+
+          - os: macos-latest
+            preset: release
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hendrikmuhs/ccache-action@v1
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        run: ctest --test-dir build/${{ matrix.preset }}

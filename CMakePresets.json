@@ -46,6 +46,11 @@
       }
     },
     {
+      "name": "msvc",
+      "hidden": true,
+      "generator": "Ninja"
+    },
+    {
       "name": "debug",
       "inherits": [
         "debug-base",
@@ -74,6 +79,22 @@
         "release-base",
         "gcc"
       ]
+    },
+    {
+      "name": "debug-msvc",
+      "inherits": [
+        "debug-base",
+        "msvc"
+      ],
+      "binaryDir": "${sourceDir}/build/debug-msvc"
+    },
+    {
+      "name": "release-msvc",
+      "inherits": [
+        "release-base",
+        "msvc"
+      ],
+      "binaryDir": "${sourceDir}/build/release-msvc"
     }
   ],
   "buildPresets": [
@@ -92,6 +113,14 @@
     {
       "name": "release-gcc",
       "configurePreset": "release-gcc"
+    },
+    {
+      "name": "debug-msvc",
+      "configurePreset": "debug-msvc"
+    },
+    {
+      "name": "release-msvc",
+      "configurePreset": "release-msvc"
     }
   ]
 }
