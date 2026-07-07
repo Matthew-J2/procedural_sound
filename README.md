@@ -24,8 +24,8 @@ As of 07/07/2026, it
 Audio graph, core engine, oscillators.
 
 ## How to build it?
-Just run run.sh with either release or debug as an argument. Dependencies are fetched automatically.
-You will need a compiler and libc++/libstdc++ that implements C++23. You will need CMake and Ninja. <br><br>I haven't tested if it builds on anything but openSUSE Tumbleweed with clang++ and libstdc++, so pretty much the most recent release of both of those. <br><br>I don't see why it wouldn't work with GCC or MSVC but again, haven't tested it. I'll set up some CI runners when I get around to it.
+Just run run.sh with your desired preset name as an argument. Dependencies are fetched automatically.
+You will need a compiler and libc++/libstdc++ that implements C++23. You will need CMake and Ninja. <br><br>Builds and tests pass on openSUSE Tumbleweed (GCC/Clang), Ubuntu latest (GCC/Clang), Windows (MSVC), and macOS (Apple Clang).
 
 ## Output
 Running the generator produces two files in the project folder:
