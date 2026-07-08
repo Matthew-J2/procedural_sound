@@ -64,10 +64,10 @@ TEST(Graph, OscillatorAppliesFM) {
     ctx.current_sample = 0;
 
     auto osc_node = std::make_shared<OscillatorNode>(
-        std::make_unique<SineOscillator>(440.0f, 1.0f), &ctx);
+        std::make_unique<SineOscillator>(440.0f), &ctx, 1.0f);
     osc_node->inputs.push_back(std::make_shared<StubNode>(220.0f, &ctx));
 
-    SineOscillator reference(220.0f, 1.0f);
+    SineOscillator reference(220.0f);
 
     for (int i = 0; i < 10; i++) {
         ctx.current_sample++;
@@ -83,11 +83,11 @@ TEST(Graph, OscillatorNodeOwnFrequencyNoInput) {
     ctx.current_sample = 0;
 
     auto osc_node = std::make_shared<OscillatorNode>(
-        std::make_unique<SineOscillator>(440.0f, 1.0f), &ctx);
+        std::make_unique<SineOscillator>(440.0f), &ctx, 1.0f);
 
     float sample = osc_node->pull();
 
-    SineOscillator reference(440.0f, 1.0f);
+    SineOscillator reference(440.0f);
     float expected = reference.tick(ctx.sample_rate);
 
     EXPECT_NEAR(sample, expected, 1e-5f);

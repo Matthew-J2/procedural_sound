@@ -4,6 +4,7 @@
 #include "core.h"
 #include "oscillator.h"
 #include "envelope.h"
+#include "parameter.h"
 
 struct AudioNode {
     std::vector<std::shared_ptr<AudioNode>> inputs;
@@ -47,22 +48,46 @@ struct AudioNode {
 struct OscillatorNode : AudioNode {
     std::unique_ptr<Oscillator> osc;
 
-    OscillatorNode(std::unique_ptr<Oscillator> o, AudioContext* ctx) {
+    Parameter frequency;
+    Parameter amplitude;
+
+    OscillatorNode(std::unique_ptr<Oscillator> o, AudioContext* ctx, float initial_amplitude = 1.0f) {
         osc = std::move(o);
         this->ctx = ctx;
+
+        frequency.set(osc->frequency);
+        amplitude.set(initial_amplitude);
     }
 
-    // inputs condition for FM synthesis
     float process() override {
-        if (!inputs.empty())
-            osc->frequency = inputs[0]->pull();
-        return osc->tick(ctx->sample_rate);
+        osc->frequency = frequency.value();
+
+        return osc->tick(ctx->sample_rate) * amplitude.value();
     }
     
     // reset state for new note
-    void retrigger(float frequency) override {
-        osc->frequency = frequency;
+    void retrigger(float freq) override {
+        frequency.set(freq);
         osc->phase = 0.0f;
+    }
+};
+
+struct LFONode : AudioNode
+{
+    Parameter frequency;
+    Parameter amplitude;
+
+    float phase = 0.0f;
+
+    float process() override
+    {
+        float out = sinf(phase) * amplitude.value();
+
+        phase += 2.0f * PI *
+                 frequency.value()
+                 / ctx->sample_rate;
+
+        return out;
     }
 };
 

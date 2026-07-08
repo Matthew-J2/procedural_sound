@@ -37,6 +37,7 @@ FetchContent_MakeAvailable(miniaudio)
 add_library(core
     src/core.cpp
     src/instrument.cpp
+    src/parameter.cpp
 )
 
 target_include_directories(core PUBLIC

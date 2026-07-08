@@ -3,7 +3,7 @@
 
 /*============SINE==============*/
 TEST(Oscillator, SineInBounds) {
-    SineOscillator osc(440.0f, 1.0f);
+    SineOscillator osc(440.0f);
 
     float sample_rate = 44100.0f;
 
@@ -18,7 +18,7 @@ TEST(Oscillator, SineInBounds) {
 
 TEST(Oscillator, SineRespectsAmplitude)
 {
-    SineOscillator osc(440.0f, 0.25f);
+    SineOscillator osc(440.0f);
     float sample_rate = 44100.0f;
 
     for (int i = 0; i < 10000; i++) {
@@ -30,8 +30,8 @@ TEST(Oscillator, SineRespectsAmplitude)
 
 TEST(Oscillator, SineIsDeterministic)
 {
-    SineOscillator a(440.0f, 1.0f);
-    SineOscillator b(440.0f, 1.0f);
+    SineOscillator a(440.0f);
+    SineOscillator b(440.0f);
 
     float sample_rate = 44100.0f;
 
@@ -42,7 +42,7 @@ TEST(Oscillator, SineIsDeterministic)
 
 TEST(Oscillator, SineFrequencyCorrect)
 {
-    SineOscillator osc(440.0f, 1.0f);
+    SineOscillator osc(440.0f);
     float sr = 44100.0f;
 
     int samples_per_cycle = static_cast<int>(sr / 440.0f);
@@ -60,7 +60,7 @@ TEST(Oscillator, SineFrequencyCorrect)
 /*============SQUARE==============*/
 TEST(Oscillator, SquareInBounds)
 {
-    SquareOscillator osc(440.0f, 1.0f);
+    SquareOscillator osc(440.0f);
     float sr = 44100.0f;
 
     for (int i = 0; i < 10000; i++) {
@@ -72,7 +72,7 @@ TEST(Oscillator, SquareInBounds)
 
 TEST(Oscillator, SquarePhaseSplit)
 {
-    SquareOscillator osc(440.0f, 1.0f);
+    SquareOscillator osc(440.0f);
     float sr = 44100.0f;
 
     osc.phase = 0.0f;
@@ -87,7 +87,7 @@ TEST(Oscillator, SquarePhaseSplit)
 
 TEST(Oscillator, SquareRespectsAmplitude)
 {
-    SquareOscillator osc(440.0f, 0.3f);
+    SquareOscillator osc(440.0f);
     float sr = 44100.0f;
 
     for (int i = 0; i < 1000; i++) {
@@ -100,7 +100,7 @@ TEST(Oscillator, SquareRespectsAmplitude)
 /*============TRIANGLE==============*/
 TEST(Oscillator, TriangleInBounds)
 {
-    TriangleOscillator osc(440.0f, 1.0f);
+    TriangleOscillator osc(440.0f);
     float sr = 44100.0f;
 
     for (int i = 0; i < 10000; i++) {
@@ -112,7 +112,7 @@ TEST(Oscillator, TriangleInBounds)
 
 TEST(Oscillator, TriangleKeyPoints)
 {
-    TriangleOscillator osc(440.0f, 1.0f);
+    TriangleOscillator osc(440.0f);
     float sr = 44100.0f;
 
     osc.phase = 0.0f;
@@ -128,7 +128,7 @@ TEST(Oscillator, TriangleKeyPoints)
 /*============SAW==============*/
 TEST(Oscillator, SawInBounds)
 {
-    SawOscillator osc(440.0f, 1.0f);
+    SawOscillator osc(440.0f);
     float sr = 44100.0f;
 
     for (int i = 0; i < 10000; i++) {
@@ -140,7 +140,7 @@ TEST(Oscillator, SawInBounds)
 
 TEST(Oscillator, SawEndpoints)
 {
-    SawOscillator osc(440.0f, 1.0f);
+    SawOscillator osc(440.0f);
     float sr = 44100.0f;
 
     osc.phase = 0.0f;
@@ -152,7 +152,7 @@ TEST(Oscillator, SawEndpoints)
 
 TEST(Oscillator, SawHasPositiveSlopeWithinCycle)
 {
-    SawOscillator osc(440.0f, 1.0f);
+    SawOscillator osc(440.0f);
     float sr = 44100.0f;
 
     float prev = osc.tick(sr);

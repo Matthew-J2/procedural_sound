@@ -6,10 +6,9 @@ constexpr float PI = 3.14159265358979323846f;
 struct Oscillator {
     float phase = 0.0f;
     float frequency = 440.0f;
-    float amplitude = 0.1f;
 
-    Oscillator(float frequency, float amplitude)
-        : frequency(frequency), amplitude(amplitude) {}
+    Oscillator(float frequency)
+        : frequency(frequency) {}
 
     virtual float tick(float sample_rate) = 0;
     virtual ~Oscillator() = default;
@@ -18,7 +17,7 @@ struct Oscillator {
 struct SineOscillator : Oscillator {
     using Oscillator::Oscillator;
     float tick(float sample_rate) override {
-        float sample = sinf(phase) * amplitude;
+        float sample = sinf(phase);
         phase += 2.0f * PI * frequency / sample_rate;
 
     // this isn't inherited because it could be different
@@ -37,7 +36,7 @@ struct SineOscillator : Oscillator {
 struct SquareOscillator : Oscillator {
     using Oscillator::Oscillator;
     float tick(float sample_rate) override {
-        float sample = (phase < PI ? 1.0 : -1.0f) * amplitude;
+        float sample = (phase < PI ? 1.0 : -1.0f);
         phase += 2.0 * PI * frequency / sample_rate;
         phase = fmodf(phase, 2.0f * PI);
         if (phase < 0.0f)
@@ -58,8 +57,6 @@ struct TriangleOscillator : Oscillator {
         else
             sample = (3.0f - t * 4.0f);
 
-        sample *= amplitude;
-
         phase += 2.0f * PI * frequency / sample_rate;
         phase = fmodf(phase, 2.0f * PI);
         if (phase < 0.0f)
@@ -72,7 +69,7 @@ struct TriangleOscillator : Oscillator {
 struct SawOscillator : Oscillator {
     using Oscillator::Oscillator;
     float tick(float sample_rate) override {
-        float sample = (phase / PI - 1.0f) * amplitude;
+        float sample = (phase / PI - 1.0f);
         phase += 2.0f * PI * frequency / sample_rate;
         phase = fmodf(phase, 2.0f * PI);
         if (phase < 0.0f)
