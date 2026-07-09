@@ -72,24 +72,24 @@ struct OscillatorNode : AudioNode {
     }
 };
 
-struct LFONode : AudioNode
-{
-    Parameter frequency;
-    Parameter amplitude;
-
-    float phase = 0.0f;
-
-    float process() override
-    {
-        float out = sinf(phase) * amplitude.value();
-
-        phase += 2.0f * PI *
-                 frequency.value()
-                 / ctx->sample_rate;
-
-        return out;
-    }
-};
+// struct LFONode : AudioNode
+// {
+//     Parameter frequency;
+//     Parameter amplitude;
+//
+//     float phase = 0.0f;
+//
+//     float process() override
+//     {
+//         float out = sinf(phase) * amplitude.value();
+//
+//         phase += 2.0f * PI *
+//                  frequency.value()
+//                  / ctx->sample_rate;
+//
+//         return out;
+//     }
+// };
 
 struct FMNode : AudioNode {
     std::unique_ptr<Oscillator> carrier;

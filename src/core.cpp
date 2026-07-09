@@ -100,11 +100,9 @@ void build_patch(AudioContext* ctx)
     auto saw_gate = std::make_shared<GateNode>(saw, ctx);
     saw_gate->active = true;
 
-    auto lfo = std::make_shared<LFONode>();
-    lfo->ctx = ctx;
-
-    lfo->frequency.set(2.0f);
-    lfo->amplitude.set(1.0f);
+    auto lfo = std::make_shared<OscillatorNode>(
+        std::make_unique<SineOscillator>(2.0f), ctx, 1.0f
+    );
 
     auto lfo_test = std::make_shared<OscillatorNode>(
         std::make_unique<SquareOscillator>(note_frequency("C2")),
