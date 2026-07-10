@@ -48,97 +48,85 @@ struct AudioNode {
 struct OscillatorNode : AudioNode {
     std::unique_ptr<Oscillator> osc;
 
+    // frequency it would run at with no scaling
+    float base_freq = 0.0f;
+    // scaling for e.g. fm synthesis - play it modulated frequency at base frequency * ratio
+    Parameter ratio;
+
     Parameter frequency;
     Parameter amplitude;
 
-    OscillatorNode(std::unique_ptr<Oscillator> o, AudioContext* ctx, float initial_amplitude = 1.0f) {
+    OscillatorNode(std::unique_ptr<Oscillator> o, AudioContext* ctx, float initial_amplitude = 1.0f, float initial_ratio = 1.0f) {
         osc = std::move(o);
         this->ctx = ctx;
 
+        base_freq = osc->frequency;
         frequency.set(osc->frequency);
         amplitude.set(initial_amplitude);
+        ratio.set(initial_ratio);
     }
 
     float process() override {
+        frequency.base = base_freq * ratio.value();
         osc->frequency = frequency.value();
-
         return osc->tick(ctx->sample_rate) * amplitude.value();
     }
     
     // reset state for new note
     void retrigger(float freq) override {
-        frequency.set(freq);
+        base_freq = freq;
         osc->phase = 0.0f;
     }
 };
 
-// struct LFONode : AudioNode
-// {
-//     Parameter frequency;
-//     Parameter amplitude;
+// struct FMNode : AudioNode {
+//     std::unique_ptr<Oscillator> carrier;
+//     float base_freq = 0.0f;
+//     float ratio = 1.0f; // modulator frequency / base frequency = ratio
+//     float depth = 0.0f; // swing in Hz
+//     float mod_phase = 0.0f;
 //
-//     float phase = 0.0f;
+//     FMNode(std::unique_ptr<Oscillator> carrier_osc, AudioContext* ctx,
+//                    float ratio = 1.0f, float depth = 0.0f)
+//         : carrier(std::move(carrier_osc)), ratio(ratio), depth(depth) {
+//         this->ctx = ctx;
+//     }
 //
-//     float process() override
-//     {
-//         float out = sinf(phase) * amplitude.value();
+//     float process() override {
+//         float mod_freq = base_freq * ratio;
+//         float modulator = sinf(mod_phase) * depth;
 //
-//         phase += 2.0f * PI *
-//                  frequency.value()
-//                  / ctx->sample_rate;
+//         mod_phase += 2.0f * PI * mod_freq / ctx->sample_rate;
+//         mod_phase = fmodf(mod_phase, 2.0f * PI);
+//         if (mod_phase < 0.0f)
+//             mod_phase += 2.0f * PI;
 //
-//         return out;
+//         carrier->frequency = base_freq + modulator;
+//         return carrier->tick(ctx->sample_rate);
+//     }
+//
+//     int param_count() const override { return 2; }
+//
+//     void set_param(int local_index, float value) override {
+//         if (local_index == 0) ratio = value;
+//         else if (local_index == 1) depth = value;
+//     }
+//
+//     std::string_view param_name(int local_index) const override {
+//         switch (local_index) {
+//             case 0: return "fm_ratio";
+//             case 1: return "fm_depth";
+//             default: return {};
+//         }
+//     }
+//
+//     // reset state for new note
+//     void retrigger(float frequency) override {
+//         base_freq = frequency;
+//         carrier->phase = 0.0f;
+//         mod_phase = 0.0f;
 //     }
 // };
-
-struct FMNode : AudioNode {
-    std::unique_ptr<Oscillator> carrier;
-    float base_freq = 0.0f;
-    float ratio = 1.0f; // modulator frequency / base frequency = ratio
-    float depth = 0.0f; // swing in Hz
-    float mod_phase = 0.0f;
-
-    FMNode(std::unique_ptr<Oscillator> carrier_osc, AudioContext* ctx,
-                   float ratio = 1.0f, float depth = 0.0f)
-        : carrier(std::move(carrier_osc)), ratio(ratio), depth(depth) {
-        this->ctx = ctx;
-    }
-    
-    float process() override {
-        float mod_freq = base_freq * ratio;
-        float modulator = sinf(mod_phase) * depth;
-
-        mod_phase += 2.0f * PI * mod_freq / ctx->sample_rate;
-        mod_phase = fmodf(mod_phase, 2.0f * PI);
-        if (mod_phase < 0.0f)
-            mod_phase += 2.0f * PI;
-
-        carrier->frequency = base_freq + modulator;
-        return carrier->tick(ctx->sample_rate);
-    }
-
-    int param_count() const override { return 2; }
-
-    void set_param(int local_index, float value) override {
-        if (local_index == 0) ratio = value;
-        else if (local_index == 1) depth = value;
-    }
-
-    std::string_view param_name(int local_index) const override {
-        switch (local_index) {
-            case 0: return "fm_ratio";
-            case 1: return "fm_depth";
-            default: return {};
-        }
-    }
-
-    // reset state for new note
-    void retrigger(float frequency) override {
-        base_freq = frequency;
-        carrier->phase = 0.0f;
-        mod_phase = 0.0f;
-    }
-};
 
 struct MixerNode : AudioNode {
     float process() override {

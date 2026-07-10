@@ -114,7 +114,35 @@ void build_patch(AudioContext* ctx)
         .source = lfo,
         .amount = 20.0f
     });
-    mixer->inputs.push_back(lfo_test);
+    // mixer->inputs.push_back(lfo_test);
+
+    // FM sweep test
+
+    auto fm_rate_sweep = std::make_shared<OscillatorNode>(
+        std::make_unique<TriangleOscillator>(1.0f), ctx, 1.0f
+    );
+
+    auto fm_depth_sweep = std::make_shared<OscillatorNode>(
+        std::make_unique<TriangleOscillator>(0.25f), ctx, 1.0f
+    );
+
+    auto bell_carrier = std::make_shared<OscillatorNode>(
+    std::make_unique<SineOscillator>(0.0f), ctx, 0.2f
+    );
+
+    auto bell_modulator = std::make_shared<OscillatorNode>(
+        std::make_unique<SineOscillator>(0.0f), ctx, /*amplitude = depth because modulator*/ 300.0f, 1.41f
+    );
+
+    bell_modulator->frequency.modulators.push_back({fm_rate_sweep, 10.0f});
+    bell_modulator->amplitude.modulators.push_back({fm_depth_sweep, 150.0f});
+
+    bell_carrier->frequency.modulators.push_back({bell_modulator, 1.0f});
+
+    bell_carrier->retrigger(note_frequency("C3"));
+    bell_modulator->retrigger(note_frequency("C3"));
+
+    mixer->inputs.push_back(bell_carrier);
 
     // mixer->inputs.push_back(sine);
     // mixer->inputs.push_back(square);
