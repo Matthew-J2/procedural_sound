@@ -6,7 +6,7 @@ float Parameter::value()
     float result = base;
 
     for (auto& modulator : modulators) {
-        result += modulator.amount * modulator.source->pull();
+        result += modulator.amount.value() * modulator.source->pull();
     }
 
     return result;

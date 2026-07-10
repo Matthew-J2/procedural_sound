@@ -19,6 +19,6 @@ struct Parameter {
 
 struct ModulationSource {
     std::shared_ptr<AudioNode> source;
-    float amount;
+    Parameter amount;
 };
 

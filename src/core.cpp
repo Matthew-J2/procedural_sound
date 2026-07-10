@@ -112,14 +112,19 @@ void build_patch(AudioContext* ctx)
 
     lfo_test->frequency.modulators.push_back({
         .source = lfo,
-        .amount = 20.0f
+        .amount = {20.0f, {}}
     });
     // mixer->inputs.push_back(lfo_test);
 
     // FM sweep test
 
+
+    auto meta_depth_lfo = std::make_shared<OscillatorNode>(
+        std::make_unique<TriangleOscillator>(0.2f), ctx, 1.0f
+    );
+
     auto fm_rate_sweep = std::make_shared<OscillatorNode>(
-        std::make_unique<TriangleOscillator>(1.0f), ctx, 1.0f
+        std::make_unique<TriangleOscillator>(10.0f), ctx, 1.0f
     );
 
     auto fm_depth_sweep = std::make_shared<OscillatorNode>(
@@ -134,10 +139,14 @@ void build_patch(AudioContext* ctx)
         std::make_unique<SineOscillator>(0.0f), ctx, /*amplitude = depth because modulator*/ 300.0f, 1.41f
     );
 
-    bell_modulator->frequency.modulators.push_back({fm_rate_sweep, 10.0f});
-    bell_modulator->amplitude.modulators.push_back({fm_depth_sweep, 150.0f});
+    bell_modulator->frequency.modulators.push_back({fm_rate_sweep, {10.0f, {}}});
+    bell_modulator->amplitude.modulators.push_back({fm_depth_sweep, {150.0f, {}}});
 
-    bell_carrier->frequency.modulators.push_back({bell_modulator, 1.0f});
+    bell_carrier->frequency.modulators.push_back({bell_modulator, {1.0f, {}}});
+
+    auto& fm_rate_sweep_depth_sweep = bell_modulator->frequency.modulators.back();
+
+    fm_rate_sweep_depth_sweep.amount.modulators.push_back({meta_depth_lfo, {10.0f, {}}});
 
     bell_carrier->retrigger(note_frequency("C3"));
     bell_modulator->retrigger(note_frequency("C3"));
