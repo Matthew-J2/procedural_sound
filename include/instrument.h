@@ -11,7 +11,13 @@ using NodeFactory = std::function<std::shared_ptr<AudioNode>(std::shared_ptr<Aud
 
 // turns nodes' parameter lists into one flat list of named parameters per instrument
 struct ParamMap {
-    struct Entry { std::shared_ptr<AudioNode> node; int local_index; };
+    struct Entry { 
+        std::shared_ptr<AudioNode> node; 
+        int local_index;
+
+        Parameter* modulator_owner = nullptr;
+        int modulator_index = -1;
+    };
 
     // table
     std::vector<Entry> entries;
@@ -28,6 +34,16 @@ struct ParamMap {
             if (!name.empty())
                 name_to_id.emplace(std::string(name), global_id);
         }
+    }
+
+    // necessary because owning node doesnt know which modulators exist on a parameter
+    int add_modulator_param(std::string name, Parameter& owner, int modulator_index) {
+        int global_id = static_cast<int>(entries.size());
+        entries.push_back(Entry{nullptr, -1, &owner, modulator_index});
+        if (!name.empty())
+            name_to_id.emplace(std::move(name), global_id);
+        return global_id;
+        
     }
 
     // check which node to change, call with local index
