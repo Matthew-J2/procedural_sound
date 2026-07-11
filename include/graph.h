@@ -175,6 +175,31 @@ struct ConstantNode : AudioNode {
     float process() override { return value; }
 };
 
+struct GainNode : AudioNode {
+    Parameter amplitude;
+
+    GainNode(std::shared_ptr<AudioNode> source, AudioContext* ctx, float initial_amplitude = 0.0f) {
+        inputs.push_back(source);
+        this->ctx = ctx;
+        amplitude.set(initial_amplitude);
+    }
+
+    float process() override {
+        return inputs[0]->pull() * amplitude.value();
+    }
+    
+    int param_count() const override {return 1;}
+
+    void set_param(int local_index, float value) override {
+        if (local_index == 0)
+            amplitude.set(value);
+    }
+
+    std::string_view param_name(int local_index) const override {
+        return local_index == 0 ? std::string_view("gain") : std::string_view();
+        }
+};
+
 // one input. trigger, release and tick are handled by ADSR struct
 struct EnvelopeNode : AudioNode {
     ADSR adsr;
@@ -197,7 +222,7 @@ struct EnvelopeNode : AudioNode {
     }
 
     float process() override {
-        return inputs[0]-> pull() * adsr.tick(ctx->sample_rate);
+        return adsr.tick(ctx->sample_rate);
     }
 
     int param_count() const override { return 4; }
