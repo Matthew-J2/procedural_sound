@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include "parameter.h"
 
 struct ADSR {
     enum class Stage {
@@ -10,17 +11,22 @@ struct ADSR {
         Release
     };
 
-    float attack_time = 0.0f;
-    float decay_time = 0.0f;
-    float sustain_level = 0.0f;
-    float release_time = 0.0f;
+    Parameter attack_time;
+    Parameter decay_time;
+    Parameter sustain_level;
+    Parameter release_time;
 
     Stage stage = Stage::Idle;
 
-    ADSR(float attack_time = 0.0f, float decay_time = 0.0f,
-         float sustain_level = 0.0f, float release_time = 0.0f)
-        : attack_time(attack_time), decay_time(decay_time),
-          sustain_level(sustain_level), release_time(release_time) {}
+
+    ADSR(float attack_time_ = 0.0f, float decay_time_ = 0.0f,
+         float sustain_level_ = 0.0f, float release_time_ = 0.0f) {
+        attack_time.set(attack_time_);
+        decay_time.set(decay_time_);
+        sustain_level.set(sustain_level_);
+        release_time.set(release_time_);
+    }
+
 
     float tick (float sample_rate) {
         switch (stage) {
@@ -30,27 +36,27 @@ struct ADSR {
 
             // advance up/down amplitude gradient unless next section
             case Stage::Attack:
-                if(advance_segment(sample_rate, attack_time)) {
+                if(advance_segment(sample_rate, attack_time.value())) {
                     stage = Stage::Decay;
                     segment_start = current_level;
-                    segment_target = peak_level * sustain_level;
+                    segment_target = peak_level * sustain_level.value();
                     segment_elapsed = 0;
                 }   
                 break;
             
             case Stage::Decay:
-                segment_target = peak_level * sustain_level;
-                if (advance_segment (sample_rate, decay_time)) {
+                segment_target = peak_level * sustain_level.value();
+                if (advance_segment (sample_rate, decay_time.value())) {
                     stage = Stage::Sustain;
-                    current_level = peak_level * sustain_level;
+                    current_level = peak_level * sustain_level.value();
                 }
                 break;
             case Stage::Sustain:
-                current_level = peak_level * sustain_level;
+                current_level = peak_level * sustain_level.value();
                 break;
             
             case Stage::Release:
-                if (advance_segment(sample_rate, release_time)) {
+                if (advance_segment(sample_rate, release_time.value())) {
                     stage = Stage::Idle;
                     current_level = 0.0f;
                 }

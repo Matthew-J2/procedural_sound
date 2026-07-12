@@ -98,7 +98,7 @@ void build_patch(AudioContext* ctx)
     );
 
     auto saw_gate = std::make_shared<GateNode>(saw, ctx);
-    saw_gate->active = true;
+    saw_gate->active.set(1.0f);
 
     auto lfo = std::make_shared<OscillatorNode>(
         std::make_unique<SineOscillator>(2.0f), ctx, 1.0f
@@ -161,7 +161,7 @@ void build_patch(AudioContext* ctx)
     // std::vector<NodeFactory> gated = {
     //     [](std::shared_ptr<AudioNode> input, AudioContext* ctx) -> std::shared_ptr<AudioNode> {
     //         auto gate = std::make_shared<GateNode>(input, ctx);
-    //         gate->active = true; // on by default
+    //         gate->active.set(1.0f); // on by default
     //         return gate;
     //     }
     // };

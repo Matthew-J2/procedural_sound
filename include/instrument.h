@@ -13,7 +13,7 @@ using NodeFactory = std::function<std::shared_ptr<AudioNode>(std::shared_ptr<Aud
 struct ParamMap {
     struct Entry { 
         std::shared_ptr<AudioNode> node; 
-        int local_index;
+        Parameter* param = nullptr;
 
         Parameter* modulator_owner = nullptr;
         int modulator_index = -1;
@@ -26,20 +26,19 @@ struct ParamMap {
     
     // add entry to parameter table. call for each node in voice chain
     void add_node(std::shared_ptr<AudioNode> node) {
-        int count = node-> param_count();
-        for (int local_index = 0; local_index < count; local_index++) {
+        for (auto& [name, param] : node->parameters()) {
             int global_id = static_cast<int>(entries.size());
-            std::string_view name = node-> param_name(local_index);
-            entries.push_back({node, local_index});
+            entries.push_back({node, param, nullptr, -1});
             if (!name.empty())
                 name_to_id.emplace(std::string(name), global_id);
         }
     }
 
     // necessary because owning node doesnt know which modulators exist on a parameter
-    int add_modulator_param(std::string name, Parameter& owner, int modulator_index) {
+    // register a modulation source's amount
+    int add_modulator_param(std::string name, std::shared_ptr<AudioNode> owner_node, Parameter& owner, int modulator_index) {
         int global_id = static_cast<int>(entries.size());
-        entries.push_back(Entry{nullptr, -1, &owner, modulator_index});
+        entries.push_back({std::move(owner_node), nullptr, &owner, modulator_index});
         if (!name.empty())
             name_to_id.emplace(std::move(name), global_id);
         return global_id;
@@ -51,7 +50,14 @@ struct ParamMap {
         if (global_id < 0 || static_cast<size_t>(global_id) >= entries.size())
             return; // unknown id
         const Entry& e = entries[global_id];
-        e.node->set_param(e.local_index, value);
+        
+        // check type of entry
+        if (e.modulator_owner) {
+            if (e.modulator_index < 0)
+                e.modulator_owner->modulators[e.modulator_index].amount.base = value;
+        } else if (e.param) {
+            e.param->base = value;
+        }
     }
 
     // check name -> id in events

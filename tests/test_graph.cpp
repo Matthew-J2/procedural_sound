@@ -42,7 +42,7 @@ TEST(Graph, GateBlocks) {
     auto source = std::make_shared<StubNode>(0.7f, &ctx);
     GateNode gate(source, &ctx);
 
-    gate.active = false;
+    gate.active.set(0.0f);
     EXPECT_FLOAT_EQ(gate.pull(), 0.0f);
 }
 
@@ -54,7 +54,7 @@ TEST(Graph, GatePasses) {
     auto source = std::make_shared<StubNode>(0.7f, &ctx);
     GateNode gate(source, &ctx);
 
-    gate.active = true;
+    gate.active.set(1.0f);
     EXPECT_FLOAT_EQ(gate.pull(), 0.7f);
 }
 

@@ -14,9 +14,7 @@ struct AudioNode {
     virtual ~AudioNode() = default;
 
 
-    virtual int param_count() const { return 0; }
-    virtual void set_param(int /*local_index*/, float /* value */) {}
-    virtual std::string_view param_name(int /* local_index */) const { return {}; }
+    virtual std::vector<std::pair<std::string_view, Parameter*>> parameters() { return {}; }
 
     // on new note
     virtual void retrigger(float /* frequency */) {}
@@ -70,6 +68,14 @@ struct OscillatorNode : AudioNode {
         frequency.base = base_freq * ratio.value();
         osc->frequency = frequency.value();
         return osc->tick(ctx->sample_rate) * amplitude.value();
+    }
+
+    std::vector<std::pair<std::string_view, Parameter*>> parameters() override {
+        return {
+            {"frequency", &frequency},
+            {"amplitude", &amplitude},
+            {"ratio", &ratio}
+        };
     }
     
     // reset state for new note
@@ -139,7 +145,7 @@ struct MixerNode : AudioNode {
 
 // On/off switch for the graph. Blocks input if not active.
 struct GateNode : AudioNode {
-    bool active = false;
+    Parameter active;
 
     GateNode(std::shared_ptr<AudioNode> source, AudioContext* ctx) {
         inputs.push_back(source);
@@ -150,19 +156,14 @@ struct GateNode : AudioNode {
         // oscillator keeps running while gate is closed. CPU inefficient
         // but more accurate to how synths work
         float sample = inputs[0]->pull();
-        return active ? sample : 0.0f;
+        return active.value() != 0.0f ? sample : 0.0f;
     }
     
-    int param_count() const override { return 1; }
 
-    void set_param(int local_index, float value) override {
-        if (local_index == 0)
-            active = (value != 0.0f);
+    std::vector<std::pair<std::string_view, Parameter*>> parameters() override {
+        return {{"active", &active}};
     }
 
-    std::string_view param_name(int local_index) const override {
-        return local_index == 0 ? std::string_view("active") : std::string_view();
-    }
 };
 
 struct ConstantNode : AudioNode {
@@ -188,16 +189,11 @@ struct GainNode : AudioNode {
         return inputs[0]->pull() * amplitude.value();
     }
     
-    int param_count() const override {return 1;}
 
-    void set_param(int local_index, float value) override {
-        if (local_index == 0)
-            amplitude.set(value);
+    std::vector<std::pair<std::string_view, Parameter*>> parameters() override {
+        return {{"gain", &amplitude}};
     }
 
-    std::string_view param_name(int local_index) const override {
-        return local_index == 0 ? std::string_view("gain") : std::string_view();
-        }
 };
 
 // one input. trigger, release and tick are handled by ADSR struct
@@ -225,27 +221,14 @@ struct EnvelopeNode : AudioNode {
         return adsr.tick(ctx->sample_rate);
     }
 
-    int param_count() const override { return 4; }
-
-    void set_param(int local_index, float value) override {
-        switch (local_index) {
-            case 0: adsr.attack_time = value;   break;
-            case 1: adsr.decay_time = value;    break;
-            case 2: adsr.sustain_level = value; break;
-            case 3: adsr.release_time = value;  break;
-        }
+    std::vector<std::pair<std::string_view, Parameter*>> parameters() override {
+        return {
+            {"attack", &adsr.attack_time},
+            {"decay", &adsr.decay_time},
+            {"sustain", &adsr.sustain_level},
+            {"release", &adsr.release_time}
+        };
     }
-
-    std::string_view param_name(int local_index) const override {
-        switch (local_index) {
-            case 0: return "attack";
-            case 1: return "decay";
-            case 2: return "sustain";
-            case 3: return "release";
-            default: return {};
-        }
-    }
-
 };
 
 // node to sum only currently active voices and prune inactive ones once their envelope is idle.
