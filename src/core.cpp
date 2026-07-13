@@ -22,7 +22,7 @@ void dispatch_due_events(AudioContext* ctx, SPSCRingBuffer<ScheduledEvent>& queu
             case EventType::NoteOn:
                 for (size_t i = 0; i < pool.size(); i++) {
                     if (pool[i].is_idle()) {
-                        pool[i].trigger(ev.note_id, ev.frequency, ev.amplitude);
+                        pool[i].trigger(ev.note_id, ev.note);
                         ctx->active_voice_indices[ev.instrument_index].push_back(static_cast<int>(i));
                         break;
                     }
@@ -148,8 +148,8 @@ void build_patch(AudioContext* ctx)
 
     fm_rate_sweep_depth_sweep.amount.modulators.push_back({meta_depth_lfo, {10.0f, {}}});
 
-    bell_carrier->retrigger(note_frequency("C3"));
-    bell_modulator->retrigger(note_frequency("C3"));
+    bell_carrier->retrigger(NoteEvent {.pitch = note_frequency("C3")});
+    bell_modulator->retrigger(NoteEvent {.pitch = note_frequency("C3")});
 
     mixer->inputs.push_back(bell_carrier);
 

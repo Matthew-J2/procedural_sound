@@ -8,10 +8,10 @@
 Voice make_voice(std::vector<std::shared_ptr<AudioNode>> chain,
                   std::shared_ptr<ParamMap> params) {
     return Voice(
-        [chain](float frequency, float amplitude) {
+        [chain](const NoteEvent& ev) {
             for (auto& node : chain) {
-                node->retrigger(frequency);
-                node->trigger(amplitude);   // no-op for anything that doesn't override it
+                node->retrigger(ev);
+                node->trigger(ev);   // no-op for anything that doesn't override it
             }
         },
         [chain] {

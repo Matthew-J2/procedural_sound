@@ -17,14 +17,14 @@ struct AudioNode {
     virtual std::vector<std::pair<std::string_view, Parameter*>> parameters() { return {}; }
 
     // on new note
-    virtual void retrigger(float /* frequency */) {}
+    virtual void retrigger(const NoteEvent&) {}
 
     // on e.g. adsr envelope start, release, and idle. these 3 are needed so idle voices aren't 
     // calculated by the graph and so envelope isn't special cased down the line in instruments.
     // if you don't implement these 3 in your instrument there will be a click when the note 
     // turns on/off.
 
-    virtual void trigger(float /*amplitude*/) { active_ = true; }
+    virtual void trigger(const NoteEvent&) { active_ = true; }
     virtual void release() { active_ = false; }
     virtual bool is_idle() const { return !active_; }
 
@@ -79,8 +79,8 @@ struct OscillatorNode : AudioNode {
     }
     
     // reset state for new note
-    void retrigger(float freq) override {
-        base_freq = freq;
+    void retrigger(const NoteEvent& ev) override {
+        base_freq = ev.pitch;
         osc->phase = 0.0f;
     }
 };
@@ -204,8 +204,8 @@ struct EnvelopeNode : AudioNode {
         this->ctx = ctx;
     }
 
-    void trigger(float peak) override {
-        adsr.trigger(peak);
+    void trigger(const NoteEvent& ev) override {
+        adsr.trigger(ev.velocity);
     }
 
     void release() override {
