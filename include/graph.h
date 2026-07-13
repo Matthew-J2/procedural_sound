@@ -200,8 +200,7 @@ struct GainNode : AudioNode {
 struct EnvelopeNode : AudioNode {
     ADSR adsr;
 
-    EnvelopeNode(std::shared_ptr<AudioNode> source, AudioContext* ctx, ADSR envelope = ADSR()): adsr(envelope) {
-        inputs.push_back(source);
+    EnvelopeNode(AudioContext* ctx, ADSR envelope = ADSR()): adsr(envelope) {
         this->ctx = ctx;
     }
 

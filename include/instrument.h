@@ -52,9 +52,8 @@ struct ParamMap {
         const Entry& e = entries[global_id];
         
         // check type of entry
-        if (e.modulator_owner) {
-            if (e.modulator_index < 0)
-                e.modulator_owner->modulators[e.modulator_index].amount.base = value;
+        if (e.modulator_owner && e.modulator_index >= 0) {
+            e.modulator_owner->modulators[e.modulator_index].amount.base = value;
         } else if (e.param) {
             e.param->base = value;
         }

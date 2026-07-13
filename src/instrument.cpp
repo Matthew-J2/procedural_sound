@@ -30,7 +30,7 @@ Voice make_voice(std::vector<std::shared_ptr<AudioNode>> chain,
 
 NodeFactory make_envelope_factory(ADSR envelope) {
     return [envelope](std::shared_ptr<AudioNode> input, AudioContext* ctx) -> std::shared_ptr<AudioNode> {
-        return std::make_shared<EnvelopeNode>(input, ctx, envelope);
+        return std::make_shared<EnvelopeNode>(ctx, envelope);
     };
 }
 
