@@ -1,6 +1,7 @@
 #pragma once
 #include <vector>
 #include <memory>   
+#include <unordered_set>
 #include "core.h"
 #include "oscillator.h"
 #include "envelope.h"
@@ -9,6 +10,9 @@
 struct AudioNode {
     std::vector<std::shared_ptr<AudioNode>> inputs;
     AudioContext* ctx = nullptr;
+
+    // true = instrument controlled, false = voice controlled
+    bool shared = false;
 
     virtual float process() = 0;
     virtual ~AudioNode() = default;
@@ -43,12 +47,42 @@ struct AudioNode {
 
 };
 
+// walks all nodes with pre-order DFS reachable from input node until a node marked 
+// shared is found. used to decide trigger()/retrigger()/release() behaviour on note 
+// events and which are piped into is_idle().
+
+// forward declaration
+template <typename Fn>
+void for_each_voice_node(AudioNode* node, std::unordered_set<AudioNode*>& seen, Fn&& visit);
+
+// for parameters
+template <typename Fn>
+void for_each_voice_node(Parameter& param, std::unordered_set<AudioNode*>& seen, Fn&& visit) {
+    for (auto& mod : param.modulators) {
+        for_each_voice_node(mod.source.get(), seen, visit);
+        for_each_voice_node(mod.amount, seen, visit);
+    }
+}
+
+// for nodes
+template <typename Fn>
+void for_each_voice_node(AudioNode* node, std::unordered_set<AudioNode*>& seen, Fn&& visit) {
+    if (!node || node->shared || !seen.insert(node).second)
+        return;
+
+    for (auto& input : node-> inputs)
+        for_each_voice_node(input.get(), seen, visit);
+
+    for (auto& [name, param] : node->parameters())
+        for_each_voice_node(*param, seen, visit);
+}
+
 struct OscillatorNode : AudioNode {
     std::unique_ptr<Oscillator> osc;
 
     // frequency it would run at with no scaling
     float base_freq = 0.0f;
-    // scaling for e.g. fm synthesis - play it modulated frequency at base frequency * ratio
+    // scaling for e.g. fm synthesis - play its modulated frequency at base frequency * ratio
     Parameter ratio;
 
     Parameter frequency;

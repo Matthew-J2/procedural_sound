@@ -1,28 +1,34 @@
 #include "instrument.h"
+#include "graph.h"
 
 // factories for building instrument patches.
 
 // when a note starts, set pitch, reset phase, trigger envelope
 // when releasing a note, trigger envelope release
 // takes parameter ID to be changed and forwards to ParamMap
-Voice make_voice(std::vector<std::shared_ptr<AudioNode>> chain,
+
+Voice make_voice(std::shared_ptr<AudioNode> head,
                   std::shared_ptr<ParamMap> params) {
     return Voice(
-        [chain](const NoteEvent& ev) {
-            for (auto& node : chain) {
-                node->retrigger(ev);
-                node->trigger(ev);   // no-op for anything that doesn't override it
-            }
+        [head](const NoteEvent& ev) {
+            std::unordered_set<AudioNode*> seen;
+            for_each_voice_node(head.get(), seen, [&](AudioNode& node) {
+                node.retrigger(ev);
+                node.trigger(ev);   // no-op for anything that doesn't override it
+            });
         },
-        [chain] {
-            for (auto& node : chain) node->release();
+        [head] {
+            std::unordered_set<AudioNode*> seen;
+            for_each_voice_node(head.get(), seen, [&](AudioNode& node) { node.release(); });
         },
-        [chain] {
-            // idle only when every node that has a concept of "done" agrees
-            for (auto& node : chain) {
-                if (!node->is_idle()) return false;
-            }
-            return true;
+        [head] {
+            // idle only when every non-shared node that has a concept of "done" agrees
+            std::unordered_set<AudioNode*> seen;
+            bool idle = true;
+            for_each_voice_node(head.get(), seen, [&](AudioNode& node) {
+                if (!node.is_idle()) idle = false;
+            });
+            return idle;
         },
         [params](int param_id, float value) { params->set(param_id, value); }
     );
@@ -71,7 +77,7 @@ Instrument build_instrument(AudioContext* ctx,
             instrument.param_names = params->name_to_id;
         
         // create voice
-        instrument.voices.push_back(make_voice(std::move(chain_nodes), params));
+        instrument.voices.push_back(make_voice(chain_end, params));
     }
     return instrument;
 }

@@ -24,7 +24,7 @@ struct ParamMap {
     // lookup
     std::unordered_map<std::string, int> name_to_id;
     
-    // add entry to parameter table. call for each node in voice chain
+    // add entry to parameter table. call for each node in graph
     void add_node(std::shared_ptr<AudioNode> node) {
         for (auto& [name, param] : node->parameters()) {
             int global_id = static_cast<int>(entries.size());
@@ -68,7 +68,7 @@ struct ParamMap {
     }
 };
 
-Voice make_voice(std::vector<std::shared_ptr<AudioNode>> chain, std::shared_ptr<ParamMap> params);
+Voice make_voice(std::shared_ptr<AudioNode> head, std::shared_ptr<ParamMap> params);
 
 // Named collection of voices and a parameter name table.
 struct Instrument {
