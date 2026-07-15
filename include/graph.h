@@ -122,8 +122,8 @@ struct OscillatorNode : AudioNode {
     
     // reset state for new note
     void retrigger(const NoteEvent& ev) override {
-        base_freq = ev.pitch;
-        osc->phase = 0.0f;
+        if (track_note_pitch) base_freq = ev.pitch;
+        if (reset_phase_on_retrigger) osc->phase = 0.0f;
     }
 };
 
