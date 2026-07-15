@@ -1,6 +1,7 @@
 #pragma once
 #include <miniaudio.h>
 #include <math.h>
+#include <string_view>
 constexpr float PI = 3.14159265358979323846f;
 
 struct Oscillator {
@@ -11,11 +12,13 @@ struct Oscillator {
         : frequency(frequency) {}
 
     virtual float tick(float sample_rate) = 0;
+    virtual std::string_view waveform_name() const { return "Oscillator"; }
     virtual ~Oscillator() = default;
 };
 
 struct SineOscillator : Oscillator {
     using Oscillator::Oscillator;
+    std::string_view waveform_name() const override { return "Sine"; }
     float tick(float sample_rate) override {
         float sample = sinf(phase);
         phase += 2.0f * PI * frequency / sample_rate;
@@ -35,6 +38,7 @@ struct SineOscillator : Oscillator {
 // and use PolyBLEP or something for SquareOscillator
 struct SquareOscillator : Oscillator {
     using Oscillator::Oscillator;
+    std::string_view waveform_name() const override { return "Square"; }
     float tick(float sample_rate) override {
         float sample = (phase < PI ? 1.0 : -1.0f);
         phase += 2.0 * PI * frequency / sample_rate;
@@ -48,6 +52,7 @@ struct SquareOscillator : Oscillator {
 // TODO: Again, needs PolyBLEP or something
 struct TriangleOscillator : Oscillator {
     using Oscillator::Oscillator;
+    std::string_view waveform_name() const override { return "Triangle"; }
     float tick(float sample_rate) override {
         float t = phase / (2.0f * PI); // normalize to [0,1)
 
@@ -68,6 +73,7 @@ struct TriangleOscillator : Oscillator {
 
 struct SawOscillator : Oscillator {
     using Oscillator::Oscillator;
+    std::string_view waveform_name() const override { return "Saw   "; }
     float tick(float sample_rate) override {
         float sample = (phase / PI - 1.0f);
         phase += 2.0f * PI * frequency / sample_rate;

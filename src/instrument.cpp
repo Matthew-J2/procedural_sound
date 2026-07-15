@@ -12,21 +12,23 @@ Voice make_voice(std::shared_ptr<AudioNode> head,
     return Voice(
         [head](const NoteEvent& ev) {
             std::unordered_set<AudioNode*> seen;
-            for_each_voice_node(head.get(), seen, [&](AudioNode& node) {
-                node.retrigger(ev);
-                node.trigger(ev);   // no-op for anything that doesn't override it
+            for_each_voice_node(head, seen, [&](const std::shared_ptr<AudioNode>& node) {
+                node->retrigger(ev);
+                node->trigger(ev);   // no-op for anything that doesn't override it
             });
         },
         [head] {
             std::unordered_set<AudioNode*> seen;
-            for_each_voice_node(head.get(), seen, [&](AudioNode& node) { node.release(); });
+            for_each_voice_node(head, seen, [&](const std::shared_ptr<AudioNode>& node) { 
+                node->release(); 
+            });
         },
         [head] {
             // idle only when every non-shared node that has a concept of "done" agrees
             std::unordered_set<AudioNode*> seen;
             bool idle = true;
-            for_each_voice_node(head.get(), seen, [&](AudioNode& node) {
-                if (!node.is_idle()) idle = false;
+            for_each_voice_node(head, seen, [&](const std::shared_ptr<AudioNode>& node) {
+                if (!node->is_idle()) idle = false;
             });
             return idle;
         },
@@ -34,20 +36,12 @@ Voice make_voice(std::shared_ptr<AudioNode> head,
     );
 }
 
-NodeFactory make_envelope_factory(ADSR envelope) {
-    return [envelope](std::shared_ptr<AudioNode> input, AudioContext* ctx) -> std::shared_ptr<AudioNode> {
-        return std::make_shared<EnvelopeNode>(ctx, envelope);
-    };
-}
-
 // build copies of a voice
-// chain - needs to go.
-// needs to build an arbitrary graph
+// builds an arbitrary graph
 Instrument build_instrument(AudioContext* ctx,
                             std::string name,
                             int voice_count,
-                            std::function<std::shared_ptr<AudioNode>(AudioContext*)> make_head,
-                            std::vector<NodeFactory> chain,
+                            std::function<std::shared_ptr<AudioNode>(AudioContext*)> make_voice_graph,
                             std::vector<std::shared_ptr<AudioNode>> shared_nodes) {
     Instrument instrument;
     instrument.name = std::move(name);
@@ -61,33 +55,21 @@ Instrument build_instrument(AudioContext* ctx,
     // register parameters into ParamMap
     for (int i = 0; i < voice_count; i++) {
         auto params = std::make_shared<ParamMap>();
-        auto head = make_head(ctx);
-        params->add_node(head);
-
-        std::vector<std::shared_ptr<AudioNode>> chain_nodes = {head};
-        std::shared_ptr<AudioNode> chain_end = head;
-        
-        // add extra nodes to chain. need to make oscillator and envelope 
-        // work like this too but they're special cases at the moment
-        for (auto& make_node : chain) {
-            auto node = make_node(chain_end, ctx);
-            params->add_node(node);
-            chain_nodes.push_back(node);
-            chain_end = node;
-        }
+        auto head = make_voice_graph(ctx);
+        params->add_graph(head);
 
         // register shared nodes into every voice's param map
         for (auto& node : shared_nodes)
             params->add_node(node);
 
-        instrument.voice_nodes.push_back(chain_end);
+        instrument.voice_nodes.push_back(head);
 
         // only save one name table since they're identical for each voice in the instrument
         if (i == 0)
             instrument.param_names = params->name_to_id;
         
         // create voice
-        instrument.voices.push_back(make_voice(chain_end, params));
+        instrument.voices.push_back(make_voice(head, params));
     }
     return instrument;
 }

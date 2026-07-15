@@ -4,6 +4,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <stdexcept>
+#include <unordered_set>
 #include "graph.h"
 
 // takes previous node, context, returns new node.
@@ -29,9 +30,22 @@ struct ParamMap {
         for (auto& [name, param] : node->parameters()) {
             int global_id = static_cast<int>(entries.size());
             entries.push_back({node, param, nullptr, -1});
-            if (!name.empty())
-                name_to_id.emplace(std::string(name), global_id);
+            if (name.empty())
+                continue;
+            
+            std::string unique_name(name);
+            int suffix = 2;
+            while (name_to_id.count(unique_name))
+                unique_name =  std::string(name) + "_" + std::to_string(suffix++);
+            name_to_id.emplace(std::string(name), global_id);
         }
+    }
+
+    void add_graph(const std::shared_ptr<AudioNode>& head) {
+        std::unordered_set<AudioNode*> seen;
+        for_each_voice_node(head, seen, [&](const std::shared_ptr<AudioNode>& node) {
+            add_node(node);
+        });
     }
 
     // necessary because owning node doesnt know which modulators exist on a parameter

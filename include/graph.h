@@ -20,6 +20,9 @@ struct AudioNode {
 
     virtual std::vector<std::pair<std::string_view, Parameter*>> parameters() { return {}; }
 
+    // will be used by print_graph() but possibly also just useful anyway
+    virtual std::string_view type_name() const { return "AudioNode"; }
+
     // on new note
     virtual void retrigger(const NoteEvent&) {}
 
@@ -53,25 +56,27 @@ struct AudioNode {
 
 // forward declaration
 template <typename Fn>
-void for_each_voice_node(AudioNode* node, std::unordered_set<AudioNode*>& seen, Fn&& visit);
+void for_each_voice_node(const std::shared_ptr<AudioNode>& node, std::unordered_set<AudioNode*>& seen, Fn&& visit);
 
 // for parameters
 template <typename Fn>
 void for_each_voice_node(Parameter& param, std::unordered_set<AudioNode*>& seen, Fn&& visit) {
     for (auto& mod : param.modulators) {
-        for_each_voice_node(mod.source.get(), seen, visit);
+        for_each_voice_node(mod.source, seen, visit);
         for_each_voice_node(mod.amount, seen, visit);
     }
 }
 
 // for nodes
 template <typename Fn>
-void for_each_voice_node(AudioNode* node, std::unordered_set<AudioNode*>& seen, Fn&& visit) {
-    if (!node || node->shared || !seen.insert(node).second)
+void for_each_voice_node(const std::shared_ptr<AudioNode>& node, std::unordered_set<AudioNode*>& seen, Fn&& visit) {
+    if (!node || node->shared || !seen.insert(node.get()).second)
         return;
 
+    visit(node);
+
     for (auto& input : node-> inputs)
-        for_each_voice_node(input.get(), seen, visit);
+        for_each_voice_node(input, seen, visit);
 
     for (auto& [name, param] : node->parameters())
         for_each_voice_node(*param, seen, visit);
@@ -120,6 +125,8 @@ struct OscillatorNode : AudioNode {
         };
     }
     
+    std::string_view type_name() const override { return osc->waveform_name(); }
+
     // reset state for new note
     void retrigger(const NoteEvent& ev) override {
         if (track_note_pitch) base_freq = ev.pitch;
@@ -183,6 +190,8 @@ struct MixerNode : AudioNode {
             sum += input->pull();
         return sum;
     }
+
+    std::string_view type_name() const override { return "Mixer"; }
 };
 
 // On/off switch for the graph. Blocks input if not active.
@@ -206,6 +215,8 @@ struct GateNode : AudioNode {
         return {{"active", &active}};
     }
 
+    std::string_view type_name() const override { return "Gate"; }
+
 };
 
 struct ConstantNode : AudioNode {
@@ -216,6 +227,8 @@ struct ConstantNode : AudioNode {
     }
 
     float process() override { return value; }
+
+    std::string_view type_name() const override { return "Constant"; }
 };
 
 struct GainNode : AudioNode {
@@ -235,6 +248,8 @@ struct GainNode : AudioNode {
     std::vector<std::pair<std::string_view, Parameter*>> parameters() override {
         return {{"gain", &amplitude}};
     }
+
+    std::string_view type_name() const override { return "Gain"; }
 
 };
 
@@ -270,6 +285,8 @@ struct EnvelopeNode : AudioNode {
             {"release", &adsr.release_time}
         };
     }
+
+    std::string_view type_name() const override { return "Envelope"; }
 };
 
 // node to sum only currently active voices and prune inactive ones once their envelope is idle.
@@ -300,5 +317,7 @@ struct InstrumentMixNode: AudioNode {
         }
         return sum;
     }
+
+    std::string_view type_name() const override { return "InstrumentMix"; }
 };
 
