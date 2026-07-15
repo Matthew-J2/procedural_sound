@@ -88,6 +88,14 @@ struct OscillatorNode : AudioNode {
     Parameter frequency;
     Parameter amplitude;
 
+    // true: base_freq is changed on retrigger to match note pitch. 
+    // false: base_freq is not changed by retrigger e.g. for an LFO.
+    bool track_note_pitch = true;
+    
+    // true: phase snaps back to 0 on retrigger. 
+    // false: keeps running.
+    bool reset_phase_on_retrigger = true;
+
     OscillatorNode(std::unique_ptr<Oscillator> o, AudioContext* ctx, float initial_amplitude = 1.0f, float initial_ratio = 1.0f) {
         osc = std::move(o);
         this->ctx = ctx;
