@@ -41,15 +41,21 @@ NodeFactory make_envelope_factory(ADSR envelope) {
 }
 
 // build copies of a voice
+// chain - needs to go.
+// needs to build an arbitrary graph
 Instrument build_instrument(AudioContext* ctx,
                             std::string name,
                             int voice_count,
                             std::function<std::shared_ptr<AudioNode>(AudioContext*)> make_head,
-                            std::vector<NodeFactory> chain) {
+                            std::vector<NodeFactory> chain,
+                            std::vector<std::shared_ptr<AudioNode>> shared_nodes) {
     Instrument instrument;
     instrument.name = std::move(name);
     instrument.voices.reserve(voice_count);
     instrument.voice_nodes.reserve(voice_count);
+
+    for (auto& node : shared_nodes)
+        node->shared = true;
 
     // make envelope wrapped head
     // register parameters into ParamMap
@@ -69,6 +75,10 @@ Instrument build_instrument(AudioContext* ctx,
             chain_nodes.push_back(node);
             chain_end = node;
         }
+
+        // register shared nodes into every voice's param map
+        for (auto& node : shared_nodes)
+            params->add_node(node);
 
         instrument.voice_nodes.push_back(chain_end);
 
