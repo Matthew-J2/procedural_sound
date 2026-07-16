@@ -95,10 +95,8 @@ struct Instrument {
 Instrument build_instrument(AudioContext* ctx,
                              std::string name,
                              int voice_count,
-                             std::function<std::shared_ptr<AudioNode>(AudioContext*)> make_head,
-                             std::vector<NodeFactory> extra_nodes = {});
-
-NodeFactory make_envelope_factory(ADSR envelope);
+                             std::function<std::shared_ptr<AudioNode>(AudioContext*)> make_voice_graph,
+                             std::vector<std::shared_ptr<AudioNode>> shared_nodes);
 
 void register_instrument(AudioContext* ctx, Instrument instrument, std::shared_ptr<AudioNode> output_target);
 
