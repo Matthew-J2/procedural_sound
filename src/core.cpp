@@ -74,7 +74,7 @@ void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uin
     double callback_us = std::chrono::duration<double, std::micro>(t1 - t0).count();
     double budget_us = (double)frameCount / audio_ctx->sample_rate * 1'000'000.0;
 
-    if (callback_us > budget_us * 0.8) // warn before you actually miss it
+    if (callback_us > budget_us * 0.6) // warn before you actually miss it
         audio_ctx->timing_log->push({audio_ctx->current_sample, callback_us, budget_us});
 }
 
@@ -305,16 +305,22 @@ int config_device()
             .value = value
         });
     };
- 
+    int note_id = 0;
     // pad chord: C3-E3-G3, held then released out of sync with each other
-    push_note(0, 1, 0.0, 2.0, note_frequency("C4"), 0.3f);
-    push_note(0, 2, 0.5, 2.5, note_frequency("E4"), 0.3f);
-    push_note(0, 3, 1.0, 3.0, note_frequency("G4"), 0.3f);
+    push_note(0, note_id++, 0.0, 2.0, note_frequency("C4"), 0.3f);
+    push_note(0, note_id++, 0.5, 2.5, note_frequency("E4"), 0.3f);
+    push_note(0, note_id++, 1.0, 3.0, note_frequency("G4"), 0.3f);
+    push_note(0, note_id++, 0.0, 2.0, note_frequency("C3"), 0.3f);
+    push_note(0, note_id++, 0.0, 2.0, note_frequency("C5"), 0.3f);
+    push_note(0, note_id++, 0.0, 2.0, note_frequency("E5"), 0.3f);
+    push_note(0, note_id++, 0.0, 2.0, note_frequency("G5"), 0.3f);
+    push_note(0, note_id++, 0.0, 2.0, note_frequency("A4"), 0.3f);
+    push_note(0, note_id++, 0.0, 2.0, note_frequency("A3"), 0.3f);
  
     // half a 24-TET scale on "pluck", one quarter-tone every second
-    int note_id = 4;
-    for (float midi = 60.0f; midi <= 62.5f; midi += 0.5f, note_id++) {
-        double on_time = 4.0 + (note_id - 4) * 1.0;
+    int step = 0;
+    for (float midi = 60.0f; midi <= 62.5f; midi += 0.5f, note_id++, step++) {
+        double on_time = 4.0 + step * 1.0;
         push_note(1, note_id, on_time, on_time + 0.5, midi_to_frequency(midi), 0.3f);
     }
  
@@ -325,8 +331,9 @@ int config_device()
     push_param_change(9.75, 1, "release", 0.5f);
  
     // rest of the scale, now with the morphed envelope
-    for (float midi = 63.0f; midi <= 65.5f; midi += 0.5f, note_id++) {
-        double on_time = 10.0 + (note_id - 10) * 1.0;
+    step = 0;
+    for (float midi = 63.0f; midi <= 65.5f; midi += 0.5f, note_id++, step++) {
+        double on_time = 10.0 + step * 1.0;
         push_note(1, note_id, on_time, on_time + 0.5, midi_to_frequency(midi), 0.3f);
     }
  
@@ -343,7 +350,7 @@ int config_device()
         event_queue->push(ev);
 
 
-        StereoFrame frame;
+    StereoFrame frame;
         // start audio device - callback now active
         if (ma_device_start(device.get()) != MA_SUCCESS) {
             std::cerr << "Failed to start miniaudio playback device.\n";

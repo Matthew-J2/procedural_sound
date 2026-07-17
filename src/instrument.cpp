@@ -9,32 +9,37 @@
 
 Voice make_voice(std::shared_ptr<AudioNode> head,
                   std::shared_ptr<ParamMap> params) {
+
+    // walk graph beforehand to avoid allocating a new unordered_set on every sample per voice
+    auto voice_nodes = std::make_shared<std::vector<std::shared_ptr<AudioNode>>>();
+    std::unordered_set<AudioNode*> seen;
+    for_each_voice_node(head, seen, [&](const std::shared_ptr<AudioNode>& node) {
+        voice_nodes->push_back(node);
+    });
+
+
     return Voice(
-        [head](const NoteEvent& ev) {
-            std::unordered_set<AudioNode*> seen;
-            for_each_voice_node(head, seen, [&](const std::shared_ptr<AudioNode>& node) {
+        [voice_nodes](const NoteEvent& ev) {
+            for (auto& node : *voice_nodes) {
                 node->retrigger(ev);
                 node->trigger(ev);   // no-op for anything that doesn't override it
-            });
+            }
         },
-        [head] {
-            std::unordered_set<AudioNode*> seen;
-            for_each_voice_node(head, seen, [&](const std::shared_ptr<AudioNode>& node) { 
-                node->release(); 
-            });
+        [voice_nodes] {
+            for (auto& node : *voice_nodes)
+                node->release();
         },
-        [head] {
+        [voice_nodes] {
             // idle only when every non-shared node that has a concept of "done" agrees
-            std::unordered_set<AudioNode*> seen;
-            bool idle = true;
-            for_each_voice_node(head, seen, [&](const std::shared_ptr<AudioNode>& node) {
-                if (!node->is_idle()) idle = false;
-            });
-            return idle;
+            for (auto& node : *voice_nodes)
+                if (!node->is_idle())
+                    return false;
+            return true;
         },
         [params](int param_id, float value) { params->set(param_id, value); }
     );
 }
+
 
 
 // build copies of a voice
