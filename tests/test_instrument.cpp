@@ -1,4 +1,3 @@
-
 #include <gtest/gtest.h>
 #include <memory>
 #include "core.h"
@@ -202,4 +201,36 @@ TEST(Instrument, SecondVoiceUnaffectedByFirstVoicesLifecycle) {
     ctx.current_sample++;
     float remaining = mixer->pull();
     EXPECT_NEAR(remaining, 0.4f, 1e-3f); // only voice 1 left
+}
+
+TEST(Instrument, ModulatorAmountAddressableAtRuntime) {
+    AudioContext ctx;
+    ctx.sample_rate = 1000.0f;
+    ctx.current_sample = 0;
+
+    
+    auto lfo = std::make_shared<ConstantNode>(10.0f, &ctx);
+    auto node = std::make_shared<ConstantNode>(0.0f, &ctx);
+
+    auto gain = std::make_shared<GainNode>(node, &ctx, 1.0f);
+    gain->amplitude.modulators.push_back({lfo, {0.5f, {}}}); // amount starts at 0.5
+ 
+    auto params = std::make_shared<ParamMap>();
+    params->add_graph(gain);
+
+
+    int mod_id = params->id_for("gain_mod0");
+ 
+    // base(1.0) + 0.5 * 10.0 = 6.0
+    EXPECT_NEAR(gain->amplitude.value(), 6.0f, 1e-5f);
+
+
+    // turn the modulation off entirely by driving its amount to 0, exactly
+    // as a runtime ParamChange event would via param_id()/set()
+    params->set(mod_id, 0.0f);
+    EXPECT_NEAR(gain->amplitude.value(), 1.0f, 1e-5f); // base only, modulator contributes nothing
+ 
+    // turn it back on at a different amount
+    params->set(mod_id, 2.0f);
+    EXPECT_NEAR(gain->amplitude.value(), 21.0f, 1e-5f); // 1.0 + 2.0*10.0
 }

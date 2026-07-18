@@ -30,14 +30,24 @@ struct ParamMap {
         for (auto& [name, param] : node->parameters()) {
             int global_id = static_cast<int>(entries.size());
             entries.push_back({node, param, nullptr, -1});
-            if (name.empty())
-                continue;
+            if (!name.empty()) {
+                
+                std::string unique_name(name);
+                int suffix = 2;
+                while (name_to_id.count(unique_name))
+                    unique_name =  std::string(name) + "_" + std::to_string(suffix++);
+                name_to_id.emplace(std::string(name), global_id);
+            }
+                
             
-            std::string unique_name(name);
-            int suffix = 2;
-            while (name_to_id.count(unique_name))
-                unique_name =  std::string(name) + "_" + std::to_string(suffix++);
-            name_to_id.emplace(std::string(name), global_id);
+            for (size_t i = 0; i < param->modulators.size(); i++) {
+                std::string base_name = name.empty() ? "mod" : std::string(name);
+                std::string mod_name = base_name + "_mod" + std::to_string(i);
+                int mod_suffix = 2;
+                while (name_to_id.count(mod_name))
+                    mod_name = base_name + "_mod" + std::to_string(i) + "_" + std::to_string(mod_suffix++);
+                add_modulator_param(mod_name, node, *param, static_cast<int>(i));
+            }
         }
     }
 

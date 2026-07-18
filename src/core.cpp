@@ -148,28 +148,24 @@ void build_patch(AudioContext* ctx)
     auto& fm_rate_sweep_depth_sweep = bell_modulator->frequency.modulators.back();
 
     fm_rate_sweep_depth_sweep.amount.modulators.push_back({meta_depth_lfo, {10.0f, {}}});
-    //
-    // bell_carrier->retrigger(NoteEvent {.pitch = note_frequency("C3")});
-    // bell_modulator->retrigger(NoteEvent {.pitch = note_frequency("C3")});
-    //
-    // mixer->inputs.push_back(bell_carrier);
-    //
-    // mixer->inputs.push_back(sine);
-    // mixer->inputs.push_back(square);
-    // mixer->inputs.push_back(saw_gate);
+
+    auto vibrato_lfo = std::make_shared<OscillatorNode>(
+        std::make_unique<SineOscillator>(5.0f), ctx, 1.0f);
 
     // pad instrument
     register_instrument(ctx, build_instrument(
         ctx, "pad", 32,
-        [](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+        [vibrato_lfo](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
             auto osc = std::make_shared<OscillatorNode>(
                 std::make_unique<TriangleOscillator>(0.0f), ctx, 1.0f
             );
+            osc->frequency.modulators.push_back({vibrato_lfo, {0.0f, {}}});
             auto envelope = std::make_shared<EnvelopeNode>(ctx, ADSR(0.5f, 0.35f, 0.5f, 0.5f));
             auto gain = std::make_shared<GainNode>(osc, ctx, 0.0f);
             gain->amplitude.modulators.push_back({envelope, {1.0f, {}}});
             return gain;
-        }
+        },
+        {vibrato_lfo}
     ),
     mixer);
 
@@ -266,7 +262,7 @@ int config_device()
         std::cerr << "Warning: failed to open log.raw, no raw logs will be produced\n";
     }
 
-    size_t sampleTime = 20;
+    size_t sampleTime = 25;
 
     audio_ctx->audio_log_buffer = std::make_unique<SPSCRingBuffer<StereoFrame>>(device->sampleRate * sampleTime * 2); //FIXME: multiplying gives slack but doesn't actually solve the risk of overflow from pipewire / your api of choice acting up. this is bad and wastes tons of memory but I'm leaving it like this for now / a while because I want to do other stuff
 
@@ -318,14 +314,14 @@ int config_device()
     push_note(0, note_id++, 0.0, 2.0, note_frequency("A4"), 0.3f);
     push_note(0, note_id++, 0.0, 2.0, note_frequency("A3"), 0.3f);
  
-    // half a 24-TET scale on "pluck", one quarter-tone every second
+    // half a 24-TET scale on pluck, one quarter-tone every second
     int step = 0;
     for (float midi = 60.0f; midi <= 62.5f; midi += 0.5f, note_id++, step++) {
         double on_time = 4.0 + step * 1.0;
         push_note(1, note_id, on_time, on_time + 0.5, midi_to_frequency(midi), 0.3f);
     }
  
-    // partway through the scale, morph "pluck"'s envelope into something pad-like
+    // partway through the scale, morph pluck's envelope into something pad-like
     push_param_change(9.75, 1, "attack", 0.5f);
     push_param_change(9.75, 1, "decay", 0.35f);
     push_param_change(9.75, 1, "sustain", 0.5f);
@@ -341,6 +337,13 @@ int config_device()
     // finish on the "bell" instrument
     push_note(2, note_id++, 16.0, 16.5, midi_to_frequency(66.0f), 0.6f);
     push_note(2, note_id++, 17.0, 17.5, midi_to_frequency(66.5f), 0.6f);
+
+    // pad with vibrato on, turned off mid note and turned on again
+    push_param_change(18.4, 0, "frequency_mod0", 20.0f);  // vibrato on, just before the note starts
+    push_note(0, note_id, 18.5, 22.5, note_frequency("A4"), 0.4f);
+    push_param_change(20.0, 0, "frequency_mod0", 0.0f);  // vibrato off
+    push_param_change(21.5, 0, "frequency_mod0", 20.0f);  // vibrato back on
+    note_id++;
  
     std::stable_sort(events.begin(), events.end(),
         [](const ScheduledEvent& a, const ScheduledEvent& b) {
