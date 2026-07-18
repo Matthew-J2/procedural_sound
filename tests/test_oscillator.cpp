@@ -16,18 +16,6 @@ TEST(Oscillator, SineInBounds) {
     }
 }
 
-TEST(Oscillator, SineRespectsAmplitude)
-{
-    SineOscillator osc(440.0f);
-    float sample_rate = 44100.0f;
-
-    for (int i = 0; i < 10000; i++) {
-        float sample = osc.tick(sample_rate);
-        EXPECT_GE(sample, -0.25f);
-        EXPECT_LE(sample,  0.25f);
-    }
-}
-
 TEST(Oscillator, SineIsDeterministic)
 {
     SineOscillator a(440.0f);
@@ -83,18 +71,6 @@ TEST(Oscillator, SquarePhaseSplit)
 
     osc.phase = PI + 0.001f;
     EXPECT_NEAR(osc.tick(sr), -1.0f, 1e-6f);
-}
-
-TEST(Oscillator, SquareRespectsAmplitude)
-{
-    SquareOscillator osc(440.0f);
-    float sr = 44100.0f;
-
-    for (int i = 0; i < 1000; i++) {
-        float s = osc.tick(sr);
-        EXPECT_GE(s, -0.3f);
-        EXPECT_LE(s,  0.3f);
-    }
 }
 
 /*============TRIANGLE==============*/

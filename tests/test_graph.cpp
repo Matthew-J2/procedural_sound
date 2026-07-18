@@ -58,22 +58,42 @@ TEST(Graph, GatePasses) {
     EXPECT_FLOAT_EQ(gate.pull(), 0.7f);
 }
 
-TEST(Graph, OscillatorAppliesFM) {
+
+TEST(Graph, OscillatorFrequencyModulatorDrivesPitch) {
     AudioContext ctx;
     ctx.sample_rate = 44100.0f;
     ctx.current_sample = 0;
-
+ 
     auto osc_node = std::make_shared<OscillatorNode>(
-        std::make_unique<SineOscillator>(440.0f), &ctx, 1.0f);
-    osc_node->inputs.push_back(std::make_shared<StubNode>(220.0f, &ctx));
-
+        std::make_unique<SineOscillator>(0.0f), &ctx, 1.0f);
+    osc_node->frequency.modulators.push_back({
+        std::make_shared<StubNode>(220.0f, &ctx), {1.0f, {}}
+    });
+ 
     SineOscillator reference(220.0f);
-
+ 
     for (int i = 0; i < 10; i++) {
         ctx.current_sample++;
         float sample = osc_node->pull();
         float expected = reference.tick(ctx.sample_rate);
         EXPECT_NEAR(sample, expected, 1e-5f) << "mismatch at sample " << i;
+    }
+}
+
+
+TEST(Graph, OscillatorNodeAppliesAmplitude) {
+    AudioContext ctx;
+    ctx.sample_rate = 44100.0f;
+    ctx.current_sample = 0;
+
+    auto osc_node = std::make_shared<OscillatorNode>(
+        std::make_unique<SineOscillator>(440.0f), &ctx, 0.25f);
+
+    for (int i = 0; i < 10000; i++) {
+        ctx.current_sample++;
+        float sample = osc_node->pull();
+        EXPECT_GE(sample, -0.25f);
+        EXPECT_LE(sample, 0.25f);
     }
 }
 
