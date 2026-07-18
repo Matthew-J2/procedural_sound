@@ -9,6 +9,7 @@
 #include <chrono>
 #include <iostream>
 #include <fstream>
+#include <algorithm>
 
 using StereoFrame = AudioFrame<2>;
 
