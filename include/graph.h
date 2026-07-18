@@ -260,6 +260,8 @@ struct InstrumentMixNode: AudioNode {
             sum += nodes[i]->pull(); // advances the envelope for each active node
 
             if (pool[i].is_idle()) {
+                // reset note_id when done
+                pool[i].note_id = -1;
                 indices[k] = indices.back();
                 indices.pop_back(); // swap-and-pop, order doesn't matter
             } else {
