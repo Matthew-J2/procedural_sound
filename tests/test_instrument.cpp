@@ -1,0 +1,205 @@
+
+#include <gtest/gtest.h>
+#include <memory>
+#include "core.h"
+#include "graph.h"
+#include "instrument.h"
+ 
+static std::shared_ptr<AudioNode> make_test_voice_graph(AudioContext* ctx, const ADSR& envelope_shape) {
+    auto source = std::make_shared<ConstantNode>(1.0f, ctx);
+    auto envelope = std::make_shared<EnvelopeNode>(ctx, envelope_shape);
+    auto gain = std::make_shared<GainNode>(source, ctx, 0.0f);
+    gain->amplitude.modulators.push_back({envelope, {1.0f, {}}});
+    return gain;
+}
+ 
+TEST(Voice, IdleBeforeFirstTrigger) {
+// new voice must be idle for note_on
+    AudioContext ctx;
+    ctx.sample_rate = 1000.0f;
+    ctx.current_sample = 0;
+ 
+    auto head = make_test_voice_graph(&ctx, ADSR(0.01f, 0.01f, 0.5f, 0.01f));
+    auto params = std::make_shared<ParamMap>();
+    params->add_graph(head);
+    Voice voice = make_voice(head, params);
+ 
+    EXPECT_TRUE(voice.is_idle());
+}
+ 
+TEST(Voice, LifecycleTracksEnvelopeShape) {
+    // checks ADSR shape is correct
+    AudioContext ctx;
+    ctx.sample_rate = 1000.0f; // chosen because round number
+    ctx.current_sample = 0;
+ 
+    auto source = std::make_shared<ConstantNode>(1.0f, &ctx);
+    auto envelope = std::make_shared<EnvelopeNode>(&ctx, ADSR(0.01f, 0.01f, 0.5f, 0.01f));
+    auto gain = std::make_shared<GainNode>(source, &ctx, 0.0f);
+    gain->amplitude.modulators.push_back({envelope, {1.0f, {}}});
+ 
+    auto params = std::make_shared<ParamMap>();
+    params->add_graph(gain);
+    Voice voice = make_voice(gain, params);
+ 
+    voice.trigger(1, NoteEvent{.pitch = 440.0f, .velocity = 0.8f});
+    EXPECT_FALSE(voice.is_idle());
+ 
+    // attack: should climb towards peak volume
+    float last = 0.0f;
+    for (int i = 0; i < 10; i++) {
+        ctx.current_sample++;
+        float sample = gain->pull();
+        EXPECT_GE(sample, last - 1e-6f);
+        last = sample;
+    }
+    EXPECT_NEAR(last, 0.8f, 1e-3f);
+ 
+    // decay: 10 samples, settles at peak * sustain_level = 0.8 * 0.5 = 0.4
+    for (int i = 0; i < 10; i++) {
+        ctx.current_sample++;
+        last = gain->pull();
+    }
+    EXPECT_NEAR(last, 0.4f, 1e-3f);
+ 
+    // sustain: holds steady no matter how long we wait
+    for (int i = 0; i < 50; i++) {
+        ctx.current_sample++;
+        last = gain->pull();
+    }
+    EXPECT_NEAR(last, 0.4f, 1e-3f);
+    EXPECT_FALSE(voice.is_idle());
+ 
+    // release: 10 samples: not idle until it fully completes
+    voice.release();
+    for (int i = 0; i < 9; i++) {
+        ctx.current_sample++;
+        gain->pull();
+        EXPECT_FALSE(voice.is_idle());
+    }
+    ctx.current_sample++;
+    float final_sample = gain->pull();
+    EXPECT_NEAR(final_sample, 0.0f, 1e-3f);
+    EXPECT_TRUE(voice.is_idle());
+}
+ 
+TEST(Voice, RetriggerKeepsCurrentLevel) {
+    // check on retrigger that the voice's level doesn't go back to zero
+    AudioContext ctx;
+    ctx.sample_rate = 1000.0f;
+    ctx.current_sample = 0;
+ 
+    auto head = make_test_voice_graph(&ctx, ADSR(0.1f, 0.0f, 1.0f, 0.1f));
+    auto params = std::make_shared<ParamMap>();
+    params->add_graph(head);
+    Voice voice = make_voice(head, params);
+ 
+    voice.trigger(1, NoteEvent{.pitch = 440.0f, .velocity = 1.0f});
+    // partway through a slow attack
+    float mid_level = 0.0f;
+    for (int i = 0; i < 20; i++) {
+        ctx.current_sample++;
+        mid_level = head->pull();
+    }
+    ASSERT_GT(mid_level, 0.0f);
+    ASSERT_LT(mid_level, 1.0f);
+ 
+    // retriggering (e.g. the same voice reused for a new note) should
+    // continue from the current level, not snap back to 0 first
+    voice.trigger(2, NoteEvent{.pitch = 220.0f, .velocity = 1.0f});
+    ctx.current_sample++;
+    float just_after_retrigger = head->pull();
+    EXPECT_NEAR(just_after_retrigger, mid_level, 0.05f);
+}
+ 
+TEST(Instrument, MixerPrunesIdleVoiceAndResetsNoteId) {
+    
+    AudioContext ctx;
+    ctx.sample_rate = 1000.0f;
+    ctx.current_sample = 0;
+ 
+    auto instrument = build_instrument(&ctx, "test", 2,
+        [](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+            return make_test_voice_graph(ctx, ADSR(0.01f, 0.01f, 0.6f, 0.01f));
+        });
+ 
+    auto mixer = std::make_shared<MixerNode>();
+    mixer->ctx = &ctx;
+    register_instrument(&ctx, instrument, mixer);
+ 
+    // simulate what dispatch_due_events does on NoteOn, without going
+    // through the event queue itself
+    auto& pool = ctx.instrument_voice_pools[0];
+    pool[0].trigger(7, NoteEvent{.pitch = 440.0f, .velocity = 1.0f});
+    ctx.active_voice_indices[0].push_back(0);
+ 
+    EXPECT_EQ(ctx.active_voice_indices[0].size(), 1u);
+ 
+    // advance through attack + decay into sustain
+    for (int i = 0; i < 30; i++) {
+        ctx.current_sample++;
+        mixer->pull();
+    }
+    EXPECT_EQ(pool[0].note_id, 7);
+    EXPECT_EQ(ctx.active_voice_indices[0].size(), 1u);
+ 
+    pool[0].release();
+ 
+    // release is 10 samples - must not be pruned before it actually completes
+    for (int i = 0; i < 9; i++) {
+        ctx.current_sample++;
+        mixer->pull();
+        EXPECT_EQ(ctx.active_voice_indices[0].size(), 1u);
+    }
+ 
+    // the sample that completes the release should prune it out of the
+    // active list and reset note_id, so a later stray NoteOff for id 7
+    // can't accidentally match this (now-unrelated) voice again
+    ctx.current_sample++;
+    mixer->pull();
+    EXPECT_EQ(ctx.active_voice_indices[0].size(), 0u);
+    EXPECT_EQ(pool[0].note_id, -1);
+}
+ 
+TEST(Instrument, SecondVoiceUnaffectedByFirstVoicesLifecycle) {
+    // polyphony isolation check
+    AudioContext ctx;
+    ctx.sample_rate = 1000.0f;
+    ctx.current_sample = 0;
+ 
+    auto instrument = build_instrument(&ctx, "test", 2,
+        [](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+            return make_test_voice_graph(ctx, ADSR(0.0f, 0.0f, 1.0f, 0.01f));
+        });
+ 
+    auto mixer = std::make_shared<MixerNode>();
+    mixer->ctx = &ctx;
+    register_instrument(&ctx, instrument, mixer);
+ 
+    auto& pool = ctx.instrument_voice_pools[0];
+ 
+    pool[0].trigger(1, NoteEvent{.pitch = 440.0f, .velocity = 0.4f});
+    ctx.active_voice_indices[0].push_back(0);
+    pool[1].trigger(2, NoteEvent{.pitch = 220.0f, .velocity = 0.4f});
+    ctx.active_voice_indices[0].push_back(1);
+ 
+    ctx.current_sample++;
+    float both = mixer->pull(); // instant attack/decay -> both already at peak
+    EXPECT_NEAR(both, 0.8f, 1e-3f); // 0.4 + 0.4
+ 
+    pool[0].release();
+ 
+    // release voice 0 fully (10 samples); voice 1 should be untouched throughout
+    for (int i = 0; i < 10; i++) {
+        ctx.current_sample++;
+        mixer->pull();
+    }
+    EXPECT_EQ(ctx.active_voice_indices[0].size(), 1u);
+    EXPECT_EQ(ctx.active_voice_indices[0][0], 1); // voice 1 is the one still active
+    EXPECT_EQ(pool[0].note_id, -1);
+    EXPECT_EQ(pool[1].note_id, 2);
+ 
+    ctx.current_sample++;
+    float remaining = mixer->pull();
+    EXPECT_NEAR(remaining, 0.4f, 1e-3f); // only voice 1 left
+}

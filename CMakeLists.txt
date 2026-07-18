@@ -83,6 +83,7 @@ add_executable(unit_tests
     tests/test_oscillator.cpp
     tests/test_core.cpp
     tests/test_graph.cpp
+    tests/test_instrument.cpp
 )
 
 target_link_libraries(unit_tests PRIVATE
