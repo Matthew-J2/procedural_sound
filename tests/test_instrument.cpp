@@ -235,6 +235,35 @@ TEST(Instrument, ModulatorAmountAddressableAtRuntime) {
     EXPECT_NEAR(gain->amplitude.value(), 21.0f, 1e-5f); // 1.0 + 2.0*10.0
 }
 
+TEST(Instrument, ActiveVoicesDontReallocateInCallback) {
+    AudioContext ctx;
+    ctx.sample_rate = 1000.0f;
+    ctx.current_sample = 0;
+ 
+    constexpr int voice_count = 6;
+    auto instrument = build_instrument(&ctx, "test", voice_count,
+        [](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+            return make_test_voice_graph(ctx, ADSR(0.0f, 0.0f, 1.0f, 0.0f));
+        });
+ 
+    auto mixer = std::make_shared<MixerNode>();
+    mixer->ctx = &ctx;
+    register_instrument(&ctx, instrument, mixer);
+ 
+    auto& indices = ctx.active_voice_indices[0];
+    ASSERT_GE(indices.capacity(), static_cast<size_t>(voice_count))
+        << "active_voice_indices wasn't reserved for all " << voice_count
+        << " voices.";
+ 
+    size_t capacity_after_reserve = indices.capacity();
+ 
+    // simulate what dispatch_due_events does on NoteOn, one push per voice
+    for (int i = 0; i < voice_count; i++) {
+        indices.push_back(i);
+        EXPECT_EQ(indices.capacity(), capacity_after_reserve)
+            << "active_voice_indices reallocated while triggering voice " << i;
+    }
+}
 
 TEST(Dispatch, ParamChangeTargetsSingleVoiceByNoteId) {
     AudioContext ctx;

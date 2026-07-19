@@ -84,10 +84,12 @@ Instrument build_instrument(AudioContext* ctx,
 void register_instrument(AudioContext* ctx, Instrument instrument, std::shared_ptr<AudioNode> output_target) {
     int index = static_cast<int>(ctx->instrument_voice_pools.size());
     ctx->instrument_index_names[instrument.name] = index;
+    size_t voice_count = instrument.voices.size();
     ctx->instrument_voice_pools.push_back(std::move(instrument.voices));
     ctx->instrument_voice_nodes.push_back(std::move(instrument.voice_nodes));
     ctx->instrument_param_names.push_back(std::move(instrument.param_names));
     ctx->active_voice_indices.push_back({});
+    ctx->active_voice_indices.back().reserve(voice_count); // this one specifically needs reserving because pushed back in dispatch_due_events
 
     auto mix_node = std::make_shared<InstrumentMixNode>(ctx, index);
     output_target->inputs.push_back(mix_node);
