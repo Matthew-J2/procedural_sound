@@ -297,3 +297,33 @@ TEST(Dispatch, ParamChangeTargetsSingleVoiceByNoteId) {
     EXPECT_NEAR(gain0->amplitude.base, 0.2f, 1e-6f);
     EXPECT_NEAR(gain1->amplitude.base, 0.2f, 1e-6f);
 }
+
+TEST(ParamMap, UniqueNamesForNodes) {
+    AudioContext ctx;
+    ctx.sample_rate = 1000.0f;
+    ctx.current_sample = 0;
+ 
+    auto modulator = std::make_shared<OscillatorNode>(
+        std::make_unique<SineOscillator>(0.0f), &ctx, 300.0f, 1.41f);
+    auto carrier = std::make_shared<OscillatorNode>(
+        std::make_unique<SineOscillator>(0.0f), &ctx, 0.2f);
+    carrier->frequency.modulators.push_back({modulator, {1.0f, {}}});
+ 
+    ParamMap params;
+    params.add_graph(carrier);
+ 
+    int carrier_freq_id = params.id_for("frequency");
+    EXPECT_EQ(params.entries[carrier_freq_id].node.get(), carrier.get());
+ 
+    // the modulator's own "frequency" collides with the carrier's and must fall
+    // back to a unique name instead of disappearing from the map entirely
+    int modulator_freq_id = -1;
+    ASSERT_NO_THROW(modulator_freq_id = params.id_for("frequency_2"))
+        << "modulator's 'frequency' parameter collided with the carrier's and was "
+           "never registered under a fallback name - it is now unreachable by name "
+           "(e.g. this is why the bell instrument's FM modulator can't be addressed "
+           "by param name today)";
+ 
+    EXPECT_NE(modulator_freq_id, carrier_freq_id);
+    EXPECT_EQ(params.entries[modulator_freq_id].node.get(), modulator.get());
+}

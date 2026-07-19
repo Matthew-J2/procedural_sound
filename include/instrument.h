@@ -36,7 +36,7 @@ struct ParamMap {
                 int suffix = 2;
                 while (name_to_id.count(unique_name))
                     unique_name =  std::string(name) + "_" + std::to_string(suffix++);
-                name_to_id.emplace(std::string(name), global_id);
+                name_to_id.emplace(std::string(unique_name), global_id);
             }
                 
             
