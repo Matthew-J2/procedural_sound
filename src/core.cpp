@@ -38,9 +38,19 @@ void dispatch_due_events(AudioContext* ctx, SPSCRingBuffer<ScheduledEvent>& queu
                 }
                 break;
             case EventType::ParamChange:
-                for (auto& voice : pool)
-                    voice.set_param(ev.param_id, ev.value);
-                break;
+                // if no specific voice, apply to all voices in instrument
+                if (ev.note_id == -1) {
+                    for (auto& voice : pool)
+                        voice.set_param(ev.param_id, ev.value);
+                } else {
+                    for (auto& voice : pool){
+                        if (voice.note_id == ev.note_id) {
+                            voice.set_param(ev.param_id, ev.value);
+                        break;
+                        }
+                    }
+                }
+            break;
         }
     }
 }
@@ -262,7 +272,7 @@ int config_device()
         std::cerr << "Warning: failed to open log.raw, no raw logs will be produced\n";
     }
 
-    size_t sampleTime = 25;
+    size_t sampleTime = 28;
 
     audio_ctx->audio_log_buffer = std::make_unique<SPSCRingBuffer<StereoFrame>>(device->sampleRate * sampleTime * 2); //FIXME: multiplying gives slack but doesn't actually solve the risk of overflow from pipewire / your api of choice acting up. this is bad and wastes tons of memory but I'm leaving it like this for now / a while because I want to do other stuff
 
@@ -291,12 +301,12 @@ int config_device()
         });
     };
  
-    auto push_param_change = [&](double at_seconds, int instrument_index, std::string_view name, float value) {
+    auto push_param_change = [&](double at_seconds, int instrument_index, std::string_view name, float value, int note_id = -1) {
         events.push_back({
             .type = EventType::ParamChange,
             .trigger_sample = (uint64_t)(at_seconds * audio_ctx->sample_rate),
             .instrument_index = instrument_index,
-            .note_id = -1,
+            .note_id = note_id,
             .note = {},
             .param_id = param_id(audio_ctx.get(), instrument_index, name),
             .value = value
@@ -344,6 +354,13 @@ int config_device()
     push_param_change(20.0, 0, "frequency_mod0", 0.0f);  // vibrato off
     push_param_change(21.5, 0, "frequency_mod0", 20.0f);  // vibrato back on
     note_id++;
+
+    int held_note_id = note_id++;
+    int untouched_note_id = note_id++;
+
+    push_note(0, held_note_id, 23, 27.0, note_frequency("C3"), 0.4);
+    push_note(0, untouched_note_id, 23.0, 27.0, note_frequency("C4"), 0.4f);
+    push_param_change(24.5, 0, "frequency_mod0", 6.0f, held_note_id); // give only this voice vibrato
  
     std::stable_sort(events.begin(), events.end(),
         [](const ScheduledEvent& a, const ScheduledEvent& b) {

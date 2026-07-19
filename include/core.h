@@ -174,5 +174,6 @@ size_t SPSCRingBuffer<T>::get_dropped() const {
     return dropped.load(std::memory_order_relaxed);
 }
 
+void dispatch_due_events(AudioContext* ctx, SPSCRingBuffer<ScheduledEvent>& queue);
 void data_callback(ma_device* pDevice, void* pOutput, const void* pInput, ma_uint32 frameCount);
 int config_device();

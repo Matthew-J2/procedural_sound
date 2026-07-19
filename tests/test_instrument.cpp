@@ -234,3 +234,66 @@ TEST(Instrument, ModulatorAmountAddressableAtRuntime) {
     params->set(mod_id, 2.0f);
     EXPECT_NEAR(gain->amplitude.value(), 21.0f, 1e-5f); // 1.0 + 2.0*10.0
 }
+
+
+TEST(Dispatch, ParamChangeTargetsSingleVoiceByNoteId) {
+    AudioContext ctx;
+    ctx.sample_rate = 1000.0f;
+    ctx.current_sample = 0;
+ 
+    auto instrument = build_instrument(&ctx, "test", 2,
+        [](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+            return std::make_shared<GainNode>(
+                std::make_shared<ConstantNode>(1.0f, ctx), ctx, 0.5f);
+        });
+ 
+    auto mixer = std::make_shared<MixerNode>();
+    mixer->ctx = &ctx;
+    register_instrument(&ctx, instrument, mixer);
+ 
+    SPSCRingBuffer<ScheduledEvent> queue(16);
+    ctx.event_queue = &queue;
+ 
+    int gain_id = param_id(&ctx, 0, "gain");
+ 
+    // trigger two notes into two different voices, both due immediately
+    queue.push({
+        .type = EventType::NoteOn, .trigger_sample = 0, .instrument_index = 0,
+        .note_id = 1, .note = NoteEvent{.pitch = 440.0f, .velocity = 1.0f},
+        .param_id = 0, .value = 0.0f
+    });
+    queue.push({
+        .type = EventType::NoteOn, .trigger_sample = 0, .instrument_index = 0,
+        .note_id = 2, .note = NoteEvent{.pitch = 440.0f, .velocity = 1.0f},
+        .param_id = 0, .value = 0.0f
+    });
+    dispatch_due_events(&ctx, queue);
+ 
+    auto& pool = ctx.instrument_voice_pools[0];
+    ASSERT_EQ(pool[0].note_id, 1);
+    ASSERT_EQ(pool[1].note_id, 2);
+ 
+    auto gain0 = std::dynamic_pointer_cast<GainNode>(ctx.instrument_voice_nodes[0][0]);
+    auto gain1 = std::dynamic_pointer_cast<GainNode>(ctx.instrument_voice_nodes[0][1]);
+    ASSERT_TRUE(gain0 && gain1);
+ 
+    // targeted change (note_id = 2): only that voice should change
+    queue.push({
+        .type = EventType::ParamChange, .trigger_sample = 0, .instrument_index = 0,
+        .note_id = 2, .note = {}, .param_id = gain_id, .value = 0.9f
+    });
+    dispatch_due_events(&ctx, queue);
+ 
+    EXPECT_NEAR(gain0->amplitude.base, 0.5f, 1e-6f); // untouched
+    EXPECT_NEAR(gain1->amplitude.base, 0.9f, 1e-6f); // changed
+ 
+    // broadcast change (note_id = -1, the existing behavior): both change
+    queue.push({
+        .type = EventType::ParamChange, .trigger_sample = 0, .instrument_index = 0,
+        .note_id = -1, .note = {}, .param_id = gain_id, .value = 0.2f
+    });
+    dispatch_due_events(&ctx, queue);
+ 
+    EXPECT_NEAR(gain0->amplitude.base, 0.2f, 1e-6f);
+    EXPECT_NEAR(gain1->amplitude.base, 0.2f, 1e-6f);
+}
