@@ -162,20 +162,26 @@ void build_patch(AudioContext* ctx)
     auto vibrato_lfo = std::make_shared<OscillatorNode>(
         std::make_unique<SineOscillator>(5.0f), ctx, 1.0f);
 
+    auto one_pole_filter_lfo = std::make_shared<OscillatorNode>(
+        std::make_unique<SineOscillator>(20.0f), ctx, 1.0f);
+
     // pad instrument
     register_instrument(ctx, build_instrument(
         ctx, "pad", 32,
-        [vibrato_lfo](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+        [vibrato_lfo, one_pole_filter_lfo](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
             auto osc = std::make_shared<OscillatorNode>(
                 std::make_unique<TriangleOscillator>(0.0f), ctx, 1.0f
             );
             osc->frequency.modulators.push_back({vibrato_lfo, {0.0f, {}}});
+            osc->frequency.modulators[0].amount.enable_smoothing(10.6f, ctx, ctx->sample_rate);
+            auto one_pole_filter = std::make_shared<OnePoleNode>(osc, ctx); 
+            one_pole_filter->cutoff.modulators.push_back({one_pole_filter_lfo, {500.0, {}}});
             auto envelope = std::make_shared<EnvelopeNode>(ctx, ADSR(0.5f, 0.35f, 0.5f, 0.5f));
-            auto gain = std::make_shared<GainNode>(osc, ctx, 0.0f);
+            auto gain = std::make_shared<GainNode>(one_pole_filter, ctx, 0.0f);
             gain->amplitude.modulators.push_back({envelope, {1.0f, {}}});
             return gain;
         },
-        {vibrato_lfo}
+        {vibrato_lfo, one_pole_filter_lfo}
     ),
     mixer);
 

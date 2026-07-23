@@ -76,10 +76,12 @@ struct ParamMap {
         const Entry& e = entries[global_id];
         
         // check type of entry
+
+        // smooths parameter instead of jumping straight to it if parameter has enable_smoothing() called on it first. avoids click
         if (e.modulator_owner && e.modulator_index >= 0) {
-            e.modulator_owner->modulators[e.modulator_index].amount.base = value;
+            e.modulator_owner->modulators[e.modulator_index].amount.set_smoothed(value);
         } else if (e.param) {
-            e.param->base = value;
+            e.param->set_smoothed(value);
         }
     }
 

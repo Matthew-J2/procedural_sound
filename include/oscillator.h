@@ -2,7 +2,7 @@
 #include <miniaudio.h>
 #include <math.h>
 #include <string_view>
-constexpr float PI = 3.14159265358979323846f;
+#include "constants.h"
 
 struct Oscillator {
     float phase = 0.0f;

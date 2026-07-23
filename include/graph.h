@@ -2,6 +2,7 @@
 #include <vector>
 #include <memory>   
 #include <unordered_set>
+#include <algorithm>
 #include "core.h"
 #include "oscillator.h"
 #include "envelope.h"
@@ -238,6 +239,52 @@ struct EnvelopeNode : AudioNode {
     }
 
     std::string_view type_name() const override { return "Envelope"; }
+};
+
+struct OnePoleNode : AudioNode {
+    enum class Mode { LowPass, HighPass };
+
+    Parameter cutoff; // in Hz
+    Mode mode;
+
+    bool reset_state_on_retrigger = false;
+
+    OnePoleNode(std::shared_ptr<AudioNode> source, AudioContext* ctx, float initial_cutoff = 1000.0f, Mode mode = Mode::LowPass) : mode(mode) {
+        inputs.push_back(source);
+        this->ctx = ctx;
+        cutoff.set(initial_cutoff);
+    }
+
+    float process() override {
+        float input = inputs[0]->pull();
+
+        float frequency_cutoff = std::clamp(cutoff.value(), 1.0f, ctx->sample_rate * 0.49f); // 1Hz floor, ceiling slightly below Nyquist
+
+        float response_time = 1.0f / (2.0f * PI * frequency_cutoff);
+        float sample_period = 1.0f / ctx->sample_rate;
+        float alpha = response_time / (response_time + sample_period);
+
+        state = alpha * state + (1.0f - alpha) * input; // the actual filter
+
+        if (mode == Mode::LowPass)
+            return state;
+        return input - state;
+    }
+
+    std::vector<std::pair<std::string_view, Parameter*>> parameters() override {
+        return {{"cutoff", &cutoff}};
+    }
+
+    void retrigger(const NoteEvent&) override {
+        if (reset_state_on_retrigger) state = 0.0f;
+    }
+
+    std::string_view type_name() const override {
+        return mode == Mode::LowPass ? "OnePoleLowPass" : "OnePoleHighPass";
+    }
+
+    private:
+        float state = 0.0f; // where the filter is
 };
 
 // node to sum only currently active voices and prune inactive ones once their envelope is idle.
