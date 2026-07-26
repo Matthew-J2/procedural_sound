@@ -287,6 +287,69 @@ struct OnePoleNode : AudioNode {
         float state = 0.0f; // where the filter is
 };
 
+
+struct SVFNode : AudioNode {
+    enum class Mode { LowPass, HighPass, BandPass, Notch, Peak, AllPass };
+
+    Parameter cutoff; // Hz
+    Parameter resonance; // Q. 0.707 = no resonant peak
+    Mode mode;
+
+    bool reset_state_on_retrigger = false;
+
+    SVFNode(std::shared_ptr<AudioNode> source, AudioContext* ctx,
+               float initial_cutoff = 1000.0f, float initial_resonance = 0.707f,
+               Mode mode = Mode::LowPass)
+        : mode(mode) {
+        inputs.push_back(source);
+        this->ctx = ctx;
+        cutoff.set(initial_cutoff);
+        resonance.set(initial_resonance);
+    }
+
+    float process() override {
+        float input = inputs[0]->pull();
+
+        float fc = std::clamp(cutoff.value(), 1.0f, ctx->sample_rate * 0.49f); // clamp to just below Nyquist
+        float q = std::max(resonance.value(), 0.01f); // avoid division by zero
+
+        float g = std::tan(PI * fc / ctx->sample_rate); // bilinear transform
+        float k = 1.0f / q; // damping factor
+
+        float a1 = 1.0f / (1.0f + g * (g + k)); // how much old state remains
+        float a2 = g * a1; // cutoff movement
+        float a3 = g * a2; // second integration stage
+
+        float v3 = input - ic2eq; // high pass
+        float v1 = a1 * ic1eq + a2 * v3; // band pass 
+        float v2 = ic2eq + a2 * ic1eq + a3 * v3; // low pass
+
+        ic1eq = 2.0f * v1 - ic1eq; // integrators
+        ic2eq = 2.0f * v2 - ic2eq;
+
+        switch (mode) {
+            case Mode::LowPass:  return v2;
+            case Mode::BandPass: return v1;
+            case Mode::HighPass: return input - k * v1 - v2; // input - low pass - band pass damping
+            case Mode::Notch:    return input - k * v1;
+            case Mode::Peak:     return 2.0f * v2 + k * v1 - input;
+            case Mode::AllPass:  return input - 2.0f * k * v1;
+        }
+        return v2;
+    }
+
+    std::vector<std::pair<std::string_view, Parameter*>> parameters() override {
+        return {
+            {"cutoff", &cutoff},
+            {"resonance", &resonance}
+        };
+    }
+
+    private:
+        float ic1eq = 0.0f; // state 1
+        float ic2eq = 0.0f; // state 2
+};
+
 // node to sum only currently active voices and prune inactive ones once their envelope is idle.
 struct InstrumentMixNode: AudioNode {
     int instrument_index;
