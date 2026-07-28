@@ -3,6 +3,7 @@
 #include <memory>   
 #include <unordered_set>
 #include <algorithm>
+#include <cmath>
 #include "core.h"
 #include "oscillator.h"
 #include "envelope.h"
