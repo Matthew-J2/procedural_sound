@@ -345,6 +345,25 @@ struct SVFNode : AudioNode {
         };
     }
 
+    void retrigger(const NoteEvent&) override {
+        if (reset_state_on_retrigger) {
+            ic1eq = 0.0f;
+            ic2eq = 0.0f;
+        }
+    }
+
+    std::string_view type_name() const override {
+        switch (mode) {
+            case Mode::LowPass:  return "SVFLowPass";
+            case Mode::HighPass: return "SVFHighPass";
+            case Mode::BandPass: return "SVFBandPass";
+            case Mode::Notch:    return "SVFNotch";
+            case Mode::Peak:     return "SVFPeak";
+            case Mode::AllPass:  return "SVFAllPass";
+        }
+        return "SVF";
+    }
+
     private:
         float ic1eq = 0.0f; // state 1
         float ic2eq = 0.0f; // state 2
