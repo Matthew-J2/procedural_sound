@@ -383,6 +383,30 @@ void build_patch(AudioContext* ctx)
         {svf_ap_lfo}
     ), mixer);
 
+
+    register_instrument(ctx, build_instrument(
+        ctx, "svf_self_oscillation", 2,
+        [](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+            // impulse source is silent until kicked open for exactly one
+            // sample via a param change
+            auto impulse_source = std::make_shared<ConstantNode>(1.0f, ctx);
+            auto impulse_gate = std::make_shared<GateNode>(impulse_source, ctx);
+            impulse_gate->active.set(0.0f); // closed until kicked
+ 
+            auto filter = std::make_shared<SVFNode>(
+                impulse_gate, ctx, note_frequency("A4"), 6000.0f, SVFNode::Mode::BandPass
+            );
+ 
+            // sustain=1.0 and decay=0 so this envelope never itself shapes the
+            // sound - it just opens the door near-instantly and holds it open.
+            // All the audible decay is the filter ringing on its own.
+            auto envelope = std::make_shared<EnvelopeNode>(ctx, ADSR(0.001f, 0.0f, 1.0f, 1.0f));
+            auto gain = std::make_shared<GainNode>(filter, ctx, 0.0f);
+            gain->amplitude.modulators.push_back({envelope, {0.8f, {}}});
+            return gain;
+        }
+    ), mixer);
+
     ctx->output_node = mixer;
 }
 
@@ -571,6 +595,26 @@ int config_device()
     // svf_allpass_phaser (10):
     push_note(10, note_id++, 61.0, 66.0, note_frequency("A3"), 0.4f);
     push_note(10, note_id++, 61.0, 66.0, note_frequency("E4"), 0.3f);
+
+    // svf_self_oscillation (11): 
+    {
+        double sp = 1.0 / audio_ctx->sample_rate; // one sample, in seconds
+ 
+        // pitch comes entirely from the cutoff param change below, fired before impulse.
+        int self_osc_a = note_id++;
+        double t_a = 67.0;
+        push_note(11, self_osc_a, t_a, t_a + 3.5, note_frequency("A4"), 0.5f);
+        push_param_change(t_a + 2 * sp, 11, "cutoff", note_frequency("A4"), self_osc_a);
+        push_param_change(t_a + 3 * sp, 11, "active", 1.0f, self_osc_a); // one sample open
+        push_param_change(t_a + 4 * sp, 11, "active", 0.0f, self_osc_a); // close
+ 
+        int self_osc_b = note_id++;
+        double t_b = 71.5;
+        push_note(11, self_osc_b, t_b, t_b + 3.5, note_frequency("E5"), 0.5f);
+        push_param_change(t_b + 2 * sp, 11, "cutoff", note_frequency("E5"), self_osc_b);
+        push_param_change(t_b + 3 * sp, 11, "active", 1.0f, self_osc_b); // one sample open
+        push_param_change(t_b + 4 * sp, 11, "active", 0.0f, self_osc_b); // then close
+    }
  
     std::stable_sort(events.begin(), events.end(),
         [](const ScheduledEvent& a, const ScheduledEvent& b) {
