@@ -222,6 +222,167 @@ void build_patch(AudioContext* ctx)
     ), 
     mixer);
 
+    // filter stuff
+
+    // One pole low pass sweep
+
+    auto op_lp_lfo = std::make_shared<OscillatorNode>(
+        std::make_unique<TriangleOscillator>(0.2f), ctx, 1.0f);
+ 
+    register_instrument(ctx, build_instrument(
+        ctx, "onepole_lowpass_sweep", 4,
+        [op_lp_lfo](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+            auto osc = std::make_shared<OscillatorNode>(std::make_unique<SawOscillator>(0.0f), ctx, 1.0f);
+            auto filter = std::make_shared<OnePoleNode>(osc, ctx, 1200.0f, OnePoleNode::Mode::LowPass);
+            filter->cutoff.modulators.push_back({op_lp_lfo, {1100.0f, {}}}); // ~100Hz-2300Hz
+            auto envelope = std::make_shared<EnvelopeNode>(ctx, ADSR(0.05f, 0.2f, 0.8f, 0.6f));
+            auto gain = std::make_shared<GainNode>(filter, ctx, 0.0f);
+            gain->amplitude.modulators.push_back({envelope, {1.0f, {}}});
+            return gain;
+        },
+        {op_lp_lfo}
+    ), mixer);
+
+
+    auto op_hp_lfo = std::make_shared<OscillatorNode>(
+        std::make_unique<SineOscillator>(3.0f), ctx, 1.0f);
+ 
+    register_instrument(ctx, build_instrument(
+        ctx, "onepole_highpass_gargle", 4,
+        [op_hp_lfo](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+            auto osc = std::make_shared<OscillatorNode>(std::make_unique<SquareOscillator>(0.0f), ctx, 0.6f);
+            auto filter = std::make_shared<OnePoleNode>(osc, ctx, 600.0f, OnePoleNode::Mode::HighPass);
+            filter->cutoff.modulators.push_back({op_hp_lfo, {550.0f, {}}}); // ~50Hz-1150Hz
+            auto envelope = std::make_shared<EnvelopeNode>(ctx, ADSR(0.01f, 0.15f, 0.5f, 0.3f));
+            auto gain = std::make_shared<GainNode>(filter, ctx, 0.0f);
+            gain->amplitude.modulators.push_back({envelope, {1.0f, {}}});
+            return gain;
+        },
+        {op_hp_lfo}
+    ), mixer);
+
+
+    auto svf_lp_lfo = std::make_shared<OscillatorNode>(
+        std::make_unique<SquareOscillator>(4.0f), ctx, 1.0f);
+ 
+    register_instrument(ctx, build_instrument(
+        ctx, "svf_lowpass_wobble", 4,
+        [svf_lp_lfo](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+            auto osc = std::make_shared<OscillatorNode>(std::make_unique<SawOscillator>(0.0f), ctx, 1.0f);
+            auto filter = std::make_shared<SVFNode>(osc, ctx, 500.0f, 3.5f, SVFNode::Mode::LowPass);
+            filter->cutoff.modulators.push_back({svf_lp_lfo, {450.0f, {}}}); // ~50Hz-950Hz
+            auto envelope = std::make_shared<EnvelopeNode>(ctx, ADSR(0.01f, 0.1f, 0.9f, 0.3f));
+            auto gain = std::make_shared<GainNode>(filter, ctx, 0.0f);
+            gain->amplitude.modulators.push_back({envelope, {0.6f, {}}});
+            return gain;
+        },
+        {svf_lp_lfo}
+    ), mixer);
+
+
+    auto svf_hp_lfo = std::make_shared<OscillatorNode>(
+        std::make_unique<SineOscillator>(6.0f), ctx, 1.0f);
+ 
+    register_instrument(ctx, build_instrument(
+        ctx, "svf_highpass_zap", 6,
+        [svf_hp_lfo](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+            auto osc = std::make_shared<OscillatorNode>(std::make_unique<SquareOscillator>(0.0f), ctx, 0.3f);
+            auto filter = std::make_shared<SVFNode>(osc, ctx, 2000.0f, 6.0f, SVFNode::Mode::HighPass);
+            filter->cutoff.modulators.push_back({svf_hp_lfo, {1500.0f, {}}}); // ~500Hz-3500Hz
+            auto envelope = std::make_shared<EnvelopeNode>(ctx, ADSR(0.001f, 0.25f, 0.0f, 0.1f)); // short zap
+            auto gain = std::make_shared<GainNode>(filter, ctx, 0.0f);
+            gain->amplitude.modulators.push_back({envelope, {0.7f, {}}}); // high Q already adds a lot of level
+            return gain;
+        },
+        {svf_hp_lfo}
+    ), mixer);
+
+
+    auto svf_bp_lfo = std::make_shared<OscillatorNode>(
+        std::make_unique<TriangleOscillator>(0.6f), ctx, 1.0f);
+ 
+    register_instrument(ctx, build_instrument(
+        ctx, "svf_bandpass_wah", 4,
+        [svf_bp_lfo](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+            auto osc = std::make_shared<OscillatorNode>(std::make_unique<SawOscillator>(0.0f), ctx, 1.0f);
+            auto filter = std::make_shared<SVFNode>(osc, ctx, 800.0f, 3.0f, SVFNode::Mode::BandPass);
+            filter->cutoff.modulators.push_back({svf_bp_lfo, {600.0f, {}}}); // ~200Hz-1400Hz
+            auto envelope = std::make_shared<EnvelopeNode>(ctx, ADSR(0.02f, 0.2f, 0.8f, 0.4f));
+            auto gain = std::make_shared<GainNode>(filter, ctx, 0.0f);
+            gain->amplitude.modulators.push_back({envelope, {1.0f, {}}});
+            return gain;
+        },
+        {svf_bp_lfo}
+    ), mixer);
+
+
+    auto svf_notch_lfo = std::make_shared<OscillatorNode>(
+        std::make_unique<SineOscillator>(0.3f), ctx, 1.0f);
+ 
+    register_instrument(ctx, build_instrument(
+        ctx, "svf_notch_phaser", 4,
+        [svf_notch_lfo](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+            auto osc = std::make_shared<OscillatorNode>(std::make_unique<SawOscillator>(0.0f), ctx, 1.0f);
+ 
+            auto filter = std::make_shared<SVFNode>(osc, ctx, 1000.0f, 4.0f, SVFNode::Mode::Notch);
+            filter->cutoff.modulators.push_back({svf_notch_lfo, {900.0f, {}}}); // ~100Hz-1900Hz
+ 
+            auto wet_mix = std::make_shared<MixerNode>();
+            wet_mix->ctx = ctx;
+            wet_mix->inputs.push_back(osc);    // dry - osc is shared between both inputs, pull() caches it
+            wet_mix->inputs.push_back(filter); // notch-filtered
+ 
+            auto envelope = std::make_shared<EnvelopeNode>(ctx, ADSR(0.4f, 0.3f, 0.7f, 0.8f)); // pad-like, so the swirl is easy to hear
+            auto gain = std::make_shared<GainNode>(wet_mix, ctx, 0.0f);
+            gain->amplitude.modulators.push_back({envelope, {0.5f, {}}}); // halved since two signals are summed
+            return gain;
+        },
+        {svf_notch_lfo}
+    ), mixer);
+
+
+    auto svf_peak_lfo = std::make_shared<OscillatorNode>(
+        std::make_unique<TriangleOscillator>(0.4f), ctx, 1.0f);
+ 
+    register_instrument(ctx, build_instrument(
+        ctx, "svf_peak_formant", 4,
+        [svf_peak_lfo](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+            auto osc = std::make_shared<OscillatorNode>(std::make_unique<SawOscillator>(0.0f), ctx, 1.0f);
+            auto filter = std::make_shared<SVFNode>(osc, ctx, 900.0f, 4.0f, SVFNode::Mode::Peak);
+            filter->cutoff.modulators.push_back({svf_peak_lfo, {700.0f, {}}}); // ~200Hz-1600Hz
+            auto envelope = std::make_shared<EnvelopeNode>(ctx, ADSR(0.03f, 0.2f, 0.75f, 0.5f));
+            auto gain = std::make_shared<GainNode>(filter, ctx, 0.0f);
+            gain->amplitude.modulators.push_back({envelope, {0.25f, {}}}); // peak boosts a lot, tame the overall level
+            return gain;
+        },
+        {svf_peak_lfo}
+    ), mixer);
+
+
+    auto svf_ap_lfo = std::make_shared<OscillatorNode>(
+        std::make_unique<SineOscillator>(0.15f), ctx, 1.0f);
+ 
+    register_instrument(ctx, build_instrument(
+        ctx, "svf_allpass_phaser", 4,
+        [svf_ap_lfo](AudioContext* ctx) -> std::shared_ptr<AudioNode> {
+            auto osc = std::make_shared<OscillatorNode>(std::make_unique<SawOscillator>(0.0f), ctx, 1.0f);
+ 
+            auto filter = std::make_shared<SVFNode>(osc, ctx, 700.0f, 5.0f, SVFNode::Mode::AllPass);
+            filter->cutoff.modulators.push_back({svf_ap_lfo, {650.0f, {}}}); // ~50Hz-1350Hz
+ 
+            auto wet_mix = std::make_shared<MixerNode>();
+            wet_mix->ctx = ctx;
+            wet_mix->inputs.push_back(osc);
+            wet_mix->inputs.push_back(filter);
+ 
+            auto envelope = std::make_shared<EnvelopeNode>(ctx, ADSR(0.3f, 0.3f, 0.8f, 0.8f));
+            auto gain = std::make_shared<GainNode>(wet_mix, ctx, 0.0f);
+            gain->amplitude.modulators.push_back({envelope, {0.5f, {}}});
+            return gain;
+        },
+        {svf_ap_lfo}
+    ), mixer);
+
     ctx->output_node = mixer;
 }
 
@@ -241,7 +402,7 @@ int config_device()
     
     // build patches and event queue
     build_patch(audio_ctx.get());
-    auto event_queue = init_event_queue(audio_ctx.get());
+    auto event_queue = init_event_queue(audio_ctx.get(), 256);
 
     // set up miniaudio device to call data callback for audio samples when init
     // and started
@@ -278,7 +439,7 @@ int config_device()
         std::cerr << "Warning: failed to open log.raw, no raw logs will be produced\n";
     }
 
-    size_t sampleTime = 28;
+    size_t sampleTime = 90;
 
     audio_ctx->audio_log_buffer = std::make_unique<SPSCRingBuffer<StereoFrame>>(device->sampleRate * sampleTime * 2); //FIXME: multiplying gives slack but doesn't actually solve the risk of overflow from pipewire / your api of choice acting up. this is bad and wastes tons of memory but I'm leaving it like this for now / a while because I want to do other stuff
 
@@ -367,6 +528,49 @@ int config_device()
     push_note(0, held_note_id, 23, 27.0, note_frequency("C3"), 0.4);
     push_note(0, untouched_note_id, 23.0, 27.0, note_frequency("C4"), 0.4f);
     push_param_change(24.5, 0, "frequency_mod0", 6.0f, held_note_id); // give only this voice vibrato
+
+    // ===============filter stuff===============
+    
+    // onepole_lowpass_sweep (3)
+    push_note(3, note_id++, 28.0, 33.5, note_frequency("C2"), 0.5f);
+    push_note(3, note_id++, 29.5, 33.5, note_frequency("G2"), 0.35f);
+
+
+    // onepole_highpass (4):
+    push_note(4, note_id++, 34.5, 34.9, note_frequency("C4"), 0.5f);
+    push_note(4, note_id++, 35.1, 35.5, note_frequency("E4"), 0.5f);
+    push_note(4, note_id++, 35.7, 36.1, note_frequency("G4"), 0.5f);
+    push_note(4, note_id++, 36.3, 37.0, note_frequency("C5"), 0.5f);
+
+
+    // svf_lowpass_wobble (5):
+    push_note(5, note_id++, 38.0, 42.5, note_frequency("E2"), 0.6f);
+
+    // svf_highpass_zap (6):
+    push_note(6, note_id++, 43.5, 43.8, note_frequency("A4"), 0.5f);
+    push_note(6, note_id++, 44.0, 44.3, note_frequency("C5"), 0.5f);
+    push_note(6, note_id++, 44.5, 44.8, note_frequency("E5"), 0.5f);
+
+
+    // svf_bandpass_wah (7):
+    push_note(7, note_id++, 45.8, 46.2, note_frequency("C3"), 0.5f);
+    push_note(7, note_id++, 46.3, 46.7, note_frequency("C3"), 0.5f);
+    push_note(7, note_id++, 46.9, 47.4, note_frequency("D#3"), 0.5f);
+    push_note(7, note_id++, 47.6, 48.2, note_frequency("C3"), 0.5f);
+    push_note(7, note_id++, 48.4, 49.5, note_frequency("A#2"), 0.5f);
+
+
+    // svf_notch_phaser (8):
+    push_note(8, note_id++, 50.0, 55.0, note_frequency("C3"), 0.4f);
+    push_note(8, note_id++, 50.0, 55.0, note_frequency("G3"), 0.3f);
+ 
+    // svf_peak_formant (9):
+    push_note(9, note_id++, 56.0, 58.0, note_frequency("C4"), 0.5f);
+    push_note(9, note_id++, 58.2, 60.5, note_frequency("E4"), 0.5f);
+ 
+    // svf_allpass_phaser (10):
+    push_note(10, note_id++, 61.0, 66.0, note_frequency("A3"), 0.4f);
+    push_note(10, note_id++, 61.0, 66.0, note_frequency("E4"), 0.3f);
  
     std::stable_sort(events.begin(), events.end(),
         [](const ScheduledEvent& a, const ScheduledEvent& b) {
